@@ -1,0 +1,44 @@
+ <!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Admin Dashboard</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <div class="container">
+            <h2>Indicateurs clés</h2>
+            <div id="kpiContainer" class="kpi-grid">
+                <div class="kpi-card"><span>Total services</span><span id="kpiServices">0</span></div>
+                <div class="kpi-card"><span>Chiffre d'affaires</span><span id="kpiRevenue">0 €</span></div>
+                <div class="kpi-card"><span>Transactions</span><span id="kpiTransactions">0</span></div>
+                <div class="kpi-card"><span>Réservations en attente</span><span id="kpiPending">0</span></div>
+            </div>
+            <h3>Liste des réservations</h3>
+            <div style="overflow-x:auto;">
+                <table id="reservationsTable">
+                    <thead><tr><th>Client</th><th>Téléphone</th><th>Service</th><th>Date</th><th>Heure</th><th>Statut</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    <script src="../js/admin.js"></script>
+</body>
+</html>

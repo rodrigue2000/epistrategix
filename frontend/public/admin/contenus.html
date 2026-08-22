@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des contenus - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Gestion des contenus</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>Uploader un nouveau contenu</h2>
+            <form id="contentForm" enctype="multipart/form-data" style="max-width:100%;">
+                <div class="form-group">
+                    <label>Titre</label>
+                    <input type="text" id="contentTitle" required placeholder="Titre du contenu">
+                </div>
+                <div class="form-group">
+                    <label>Type de contenu</label>
+                    <select id="contentType">
+                        <option value="file">Fichier</option>
+                        <option value="video">Vidéo</option>
+                        <option value="pdf">PDF</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Type de tarif</label>
+                    <select id="contentPriceType">
+                        <option value="free">Gratuit</option>
+                        <option value="paid">Payant</option>
+                    </select>
+                </div>
+                <div class="form-group" id="priceField">
+                    <label>Prix (€) - pour contenu payant</label>
+                    <input type="number" id="contentPrice" placeholder="0.00" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Fichier</label>
+                    <input type="file" id="contentFile" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> Uploader
+                </button>
+            </form>
+
+            <h3 style="margin-top: 2rem;">Contenus existants</h3>
+            <div id="contentsList"></div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000' 
+            : 'https://votre-backend.onrender.com';
+
+        const firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            authDomain: "votre-project.firebaseapp.com",
+            projectId: "votre-project",
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        firebase.auth().onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = '../index.html';
+                return;
+            }
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_URL}/api/admin/kpi`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                alert('Accès non autorisé');
+                firebase.auth().signOut();
+                window.location.href = '../index.html';
+                return;
+            }
+            loadContents(token);
+        });
+
+        // Afficher/masquer le champ prix selon le type de tarif
+        document.getElementById('contentPriceType').addEventListener('change', function() {
+            document.getElementById('priceField').style.display = this.value === 'paid' ? 'block' : 'none';
+        });
+
+        async function loadContents(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/contents`);
+                const contents = await response.json();
+                const container = document.getElementById('contentsList');
+
+                if (contents.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucun contenu.</p>';
+                    return;
+                }
+
+                container.innerHTML = contents.map(c => `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:0.8rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <strong>${c.title}</strong>
+                            <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
+                                ${c.priceType === 'free' ? '📄 Gratuit' : '💰 ' + c.price + ' €'}
+                            </span>
+                            <a href="${c.url}" target="_blank" style="margin-left:1rem; color:#1e5fb0;">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                        </div>
+                        <button onclick="deleteContent('${c.id}')" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash-alt"></i> Supprimer
+                        </button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        document.getElementById('contentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const title = document.getElementById('contentTitle').value.trim();
+            const type = document.getElementById('contentType').value;
+            const priceType = document.getElementById('contentPriceType').value;
+            const price = parseFloat(document.getElementById('contentPrice').value);
+            const file = document.getElementById('contentFile').files[0];
+
+            if (!title || !file) {
+                alert('Titre et fichier requis');
+                return;
+            }
+
+            if (priceType === 'paid' && (isNaN(price) || price < 0)) {
+                alert('Veuillez entrer un prix valide');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('type', type);
+            formData.append('priceType', priceType);
+            formData.append('price', price);
+            formData.append('file', file);
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/contents/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de l\'upload');
+                }
+
+                alert('✅ Contenu uploadé avec succès');
+                document.getElementById('contentForm').reset();
+                loadContents(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        window.deleteContent = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            if (!confirm('Supprimer ce contenu ?')) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/contents/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la suppression');
+                }
+
+                alert('✅ Contenu supprimé');
+                loadContents(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            firebase.auth().signOut();
+            window.location.href = '../index.html';
+        });
+    </script>
+</body>
+</html>

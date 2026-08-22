@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des services - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Gestion des services</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>Créer un nouveau service</h2>
+            <form id="serviceForm">
+                <div class="form-group">
+                    <label>Nom du service</label>
+                    <input type="text" id="serviceName" required placeholder="ex: Consulting stratégique">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="serviceDescription" placeholder="Description du service..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Type de tarif</label>
+                    <select id="priceType">
+                        <option value="fixed">Prix fixe</option>
+                        <option value="free">Prix libre</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Prix (€) - pour prix fixe uniquement</label>
+                    <input type="number" id="servicePrice" placeholder="0.00" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Durée (minutes)</label>
+                    <input type="number" id="serviceDuration" value="60" min="15" step="15">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> Ajouter le service
+                </button>
+            </form>
+
+            <h3 style="margin-top: 2rem;">Services existants</h3>
+            <div id="servicesList"></div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000' 
+            : 'https://votre-backend.onrender.com';
+
+        // Configuration Firebase
+        const firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            authDomain: "votre-project.firebaseapp.com",
+            projectId: "votre-project",
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        // Vérifier l'authentification
+        firebase.auth().onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = '../index.html';
+                return;
+            }
+            const token = await user.getIdToken();
+            // Vérifier les droits admin
+            const response = await fetch(`${API_URL}/api/admin/kpi`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                alert('Accès non autorisé');
+                firebase.auth().signOut();
+                window.location.href = '../index.html';
+                return;
+            }
+            loadServices(token);
+        });
+
+        // Charger les services
+        async function loadServices(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/services`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const services = await response.json();
+                const container = document.getElementById('servicesList');
+                
+                if (services.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucun service créé.</p>';
+                    return;
+                }
+
+                container.innerHTML = services.map(s => `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <strong>${s.name}</strong>
+                            <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
+                                ${s.priceType === 'fixed' ? s.price + ' €' : 'Prix libre'}
+                                · ${s.duration || 60} min
+                            </span>
+                        </div>
+                        <div style="display:flex; gap:0.5rem;">
+                            <button onclick="editService('${s.id}')" class="btn btn-outline btn-sm">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button onclick="deleteService('${s.id}')" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        // Ajouter un service
+        document.getElementById('serviceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const name = document.getElementById('serviceName').value.trim();
+            const description = document.getElementById('serviceDescription').value.trim();
+            const priceType = document.getElementById('priceType').value;
+            const price = parseFloat(document.getElementById('servicePrice').value);
+            const duration = parseInt(document.getElementById('serviceDuration').value);
+
+            if (!name) {
+                alert('Le nom est requis');
+                return;
+            }
+
+            if (priceType === 'fixed' && (isNaN(price) || price < 0)) {
+                alert('Veuillez entrer un prix valide');
+                return;
+            }
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/services`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name, description, priceType, price, duration })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la création');
+                }
+
+                alert('✅ Service créé avec succès');
+                document.getElementById('serviceForm').reset();
+                loadServices(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        // Modifier un service
+        window.editService = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/services`);
+                const services = await response.json();
+                const service = services.find(s => s.id === id);
+                if (!service) {
+                    alert('Service non trouvé');
+                    return;
+                }
+
+                const newName = prompt('Nouveau nom:', service.name);
+                if (newName === null) return;
+                const newPrice = prompt('Nouveau prix (€):', service.price);
+                if (newPrice === null) return;
+
+                const updated = {
+                    name: newName.trim(),
+                    price: parseFloat(newPrice)
+                };
+
+                const updateResponse = await fetch(`${API_URL}/api/services/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(updated)
+                });
+
+                if (!updateResponse.ok) {
+                    const error = await updateResponse.json();
+                    throw new Error(error.error || 'Erreur lors de la modification');
+                }
+
+                alert('✅ Service modifié avec succès');
+                loadServices(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        // Supprimer un service
+        window.deleteService = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            if (!confirm('Supprimer ce service ?')) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/services/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la suppression');
+                }
+
+                alert('✅ Service supprimé');
+                loadServices(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        // Déconnexion
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            firebase.auth().signOut();
+            window.location.href = '../index.html';
+        });
+    </script>
+</body>
+</html>

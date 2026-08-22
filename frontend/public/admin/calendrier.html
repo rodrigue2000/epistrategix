@@ -1,0 +1,198 @@
+ <!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendrier - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Gestion du calendrier</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>Disponibilités et réservations</h2>
+            
+            <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
+                <h3>Blocage manuel d'un créneau</h3>
+                <form id="blockForm" style="max-width:100%; padding:1rem 0;">
+                    <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+                        <div class="form-group" style="flex:1; min-width:150px;">
+                            <label>Date</label>
+                            <input type="date" id="blockDate" required>
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:150px;">
+                            <label>Heure</label>
+                            <input type="time" id="blockTime" required>
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:150px;">
+                            <label>Motif</label>
+                            <input type="text" id="blockReason" placeholder="Raison du blocage">
+                        </div>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-ban"></i> Bloquer
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <h3>Réservations à venir</h3>
+            <div id="reservationsList"></div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000' 
+            : 'https://votre-backend.onrender.com';
+
+        const firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            authDomain: "votre-project.firebaseapp.com",
+            projectId: "votre-project",
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        firebase.auth().onAuthStateChanged(async user => {
+            if (!user) {
+                window.location.href = '../index.html';
+                return;
+            }
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_URL}/api/admin/kpi`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                alert('Accès non autorisé');
+                firebase.auth().signOut();
+                window.location.href = '../index.html';
+                return;
+            }
+            loadReservations(token);
+        });
+
+        async function loadReservations(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/reservations/export`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const reservations = await response.json();
+                const container = document.getElementById('reservationsList');
+
+                if (reservations.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucune réservation.</p>';
+                    return;
+                }
+
+                container.innerHTML = reservations.map(r => `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:0.8rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <strong>${r.clientName}</strong>
+                            <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
+                                ${r.date} à ${r.time}
+                            </span>
+                            <span style="margin-left:1rem; padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${r.status === 'paid' ? '#d4edda' : r.status === 'pending' ? '#fff3cd' : '#f8d7da'}; color:${r.status === 'paid' ? '#155724' : r.status === 'pending' ? '#856404' : '#721c24'};">
+                                ${r.status}
+                            </span>
+                        </div>
+                        <div>
+                            <button onclick="updateStatus('${r.id}', 'confirmed')" class="btn btn-success btn-sm">
+                                Confirmer
+                            </button>
+                            <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-danger btn-sm">
+                                Annuler
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        window.updateStatus = async function(id, status) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/reservations/${id}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ status })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la mise à jour');
+                }
+
+                alert(`✅ Statut mis à jour : ${status}`);
+                loadReservations(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        // Blocage manuel
+        document.getElementById('blockForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const date = document.getElementById('blockDate').value;
+            const time = document.getElementById('blockTime').value;
+            const reason = document.getElementById('blockReason').value || 'Blocage manuel';
+
+            if (!date || !time) {
+                alert('Veuillez sélectionner une date et une heure');
+                return;
+            }
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/admin/block`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ date, time, reason })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors du blocage');
+                }
+
+                alert('✅ Créneau bloqué avec succès');
+                document.getElementById('blockForm').reset();
+                loadReservations(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            firebase.auth().signOut();
+            window.location.href = '../index.html';
+        });
+    </script>
+</body>
+</html>
