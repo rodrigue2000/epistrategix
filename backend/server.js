@@ -1,5 +1,5 @@
- // ===== VERSION AVEC GESTION CORRECTE DE FIREBASE =====
-console.log('🚀 Démarrage du serveur complet...');
+ // ===== SERVEUR PRINCIPAL =====
+console.log('🚀 Démarrage du serveur...');
 
 const express = require('express');
 const cors = require('cors');
@@ -10,9 +10,9 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Routes de base
+// === ROUTES DE BASE ===
 app.get('/', (req, res) => {
-    res.send('✅ EpiStrategix API - complète');
+    res.send('✅ EpiStrategix API - en ligne');
 });
 
 app.get('/health', (req, res) => {
@@ -23,45 +23,18 @@ app.get('/health', (req, res) => {
     });
 });
 
-// === INITIALISATION FIREBASE (UNE SEULE FOIS) ===
+// === IMPORT DES CONFIGURATIONS ===
 let firebaseReady = false;
-let firebaseError = null;
-
 try {
-    const admin = require('firebase-admin');
-    console.log('✅ Module firebase-admin chargé');
-    
-    // VÉRIFIER SI FIREBASE EST DÉJÀ INITIALISÉ
-    if (admin.apps.length === 0) {
-        const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-        const projectId = process.env.FIREBASE_PROJECT_ID;
-        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-
-        if (privateKey && projectId && clientEmail) {
-            admin.initializeApp({
-                credential: admin.credential.cert({
-                    projectId: projectId,
-                    privateKey: privateKey.replace(/\\n/g, '\n'),
-                    clientEmail: clientEmail,
-                })
-            });
-            firebaseReady = true;
-            console.log('✅ Firebase initialisé avec succès (1ère fois)');
-        } else {
-            console.warn('⚠️ Variables Firebase manquantes');
-            firebaseError = 'Variables manquantes';
-        }
-    } else {
-        // Firebase déjà initialisé (par exemple dans un autre fichier)
+    // Forcer le chargement de firebase.js qui gère l'initialisation
+    const { db } = require('./config/firebase');
+    if (db) {
         firebaseReady = true;
-        console.log('✅ Firebase déjà initialisé, réutilisation');
+        console.log('✅ Firebase connecté avec succès');
     }
 } catch (err) {
-    firebaseError = err.message;
     console.error('❌ Erreur Firebase:', err.message);
 }
-
-console.log(`📊 Firebase ready: ${firebaseReady}`);
 
 // === ROUTES API ===
 if (firebaseReady) {
@@ -92,39 +65,36 @@ if (firebaseReady) {
     app.get('/api/*', (req, res) => {
         res.status(503).json({
             error: 'Service non disponible',
-            details: firebaseError || 'Firebase non initialisé',
             hint: 'Vérifiez vos variables Firebase sur Render'
         });
     });
     app.post('/api/*', (req, res) => {
         res.status(503).json({
             error: 'Service non disponible',
-            details: firebaseError || 'Firebase non initialisé'
+            hint: 'Vérifiez vos variables Firebase sur Render'
         });
     });
 }
 
-// === ROUTE DE STATUT POUR DIAGNOSTIC ===
+// === ROUTE DE STATUT ===
 app.get('/api/status', (req, res) => {
     res.json({
         firebase: firebaseReady ? '✅ OK' : '❌ Désactivé',
-        error: firebaseError || null,
         timestamp: new Date().toISOString(),
         env: process.env.NODE_ENV || 'development'
     });
 });
 
-// Gestion des erreurs non capturées
+// === GESTION DES ERREURS ===
 process.on('uncaughtException', (err) => {
     console.error('❌ Uncaught Exception:', err.message);
-    console.error('Stack:', err.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
     console.error('❌ Unhandled Rejection:', reason);
 });
 
-// Démarrage
+// === DÉMARRAGE ===
 app.listen(port, '0.0.0.0', () => {
     console.log(`✅ Serveur démarré sur le port ${port}`);
     console.log(`📊 Firebase: ${firebaseReady ? '✅ OK' : '❌ DÉSACTIVÉ'}`);
