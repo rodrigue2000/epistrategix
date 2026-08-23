@@ -9,7 +9,7 @@ fetch(`${API_URL}/api/services`)
         services.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.id;
-            opt.textContent = s.name + (s.priceType === 'fixed' ? ` (${s.price}€)` : ' (prix libre)');
+            opt.textContent = s.name + (s.priceType === 'fixed' ? ` (${s.price}FCFA)` : ' (prix libre)');
             select.appendChild(opt);
         });
     });

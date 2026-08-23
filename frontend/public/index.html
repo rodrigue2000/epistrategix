@@ -56,7 +56,7 @@
                     card.innerHTML = `
                         <h3>${service.name}</h3>
                         <p>${service.description || ''}</p>
-                        <p class="price">${service.priceType === 'fixed' ? service.price + ' €' : 'Prix libre'}</p>
+                        <p class="price">${service.priceType === 'fixed' ? service.price + ' FCFA' : 'Prix libre'}</p>
                         <a href="reservation.html?service=${service.id}" class="btn btn-secondary">Réserver</a>
                     `;
                     container.appendChild(card);

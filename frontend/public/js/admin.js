@@ -36,7 +36,7 @@ firebase.auth().onAuthStateChanged(async user => {
         
         const kpi = await response.json();
         document.getElementById('kpiServices').textContent = kpi.totalServices;
-        document.getElementById('kpiRevenue').textContent = kpi.totalRevenue + ' €';
+        document.getElementById('kpiRevenue').textContent = kpi.totalRevenue + ' FCFA';
         document.getElementById('kpiTransactions').textContent = kpi.totalTransactions;
         document.getElementById('kpiPending').textContent = kpi.reservations.pending;
 

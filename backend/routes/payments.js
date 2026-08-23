@@ -13,7 +13,7 @@ router.post('/initiate', async (req, res) => {
   try {
     const response = await fedapay.post('/v1/transactions', {
       amount: Math.round(amount * 100),
-      currency: 'EUR',
+      currency: 'XOF',
       description: `Paiement pour ${serviceName || 'service'}`,
       customer: {
         email: customerEmail || 'client@exemple.com',
