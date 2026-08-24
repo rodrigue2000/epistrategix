@@ -1,0 +1,361 @@
+ <!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connexion Admin · EpiStrategix</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f4fa;
+            padding: 1.5rem;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-card {
+            background: #ffffff;
+            border-radius: 2rem;
+            padding: 2.5rem 2rem 2rem;
+            box-shadow: 0 20px 60px rgba(10, 38, 71, 0.08);
+            border: 1px solid #e2ebf6;
+            transition: transform 0.2s ease;
+        }
+
+        .login-card:hover {
+            transform: translateY(-2px);
+        }
+
+        /* ===== HEADER ===== */
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header .icon-wrapper {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background: #eef3fc;
+            border-radius: 50%;
+            margin-bottom: 0.8rem;
+        }
+
+        .login-header .icon-wrapper i {
+            font-size: 2rem;
+            color: #1e5fb0;
+        }
+
+        .login-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0a2647;
+            letter-spacing: -0.3px;
+        }
+
+        .login-header p {
+            font-size: 0.9rem;
+            color: #4d6f94;
+            margin-top: 0.3rem;
+        }
+
+        /* ===== FORMULAIRE ===== */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: #1a3f68;
+            margin-bottom: 0.4rem;
+        }
+
+        .form-group label i {
+            margin-right: 0.4rem;
+            color: #4d6f94;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #f8faff;
+            border: 1.5px solid #dce7f5;
+            border-radius: 60px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #1e5fb0;
+            box-shadow: 0 0 0 4px rgba(30, 95, 176, 0.08);
+        }
+
+        .input-wrapper .input-icon {
+            padding: 0 0 0 1.2rem;
+            color: #7b95b5;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            padding: 0.8rem 1.2rem 0.8rem 0.8rem;
+            border: none;
+            background: transparent;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #0a2647;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .input-wrapper input::placeholder {
+            color: #b0c4df;
+            font-weight: 400;
+        }
+
+        /* ===== BOUTON ===== */
+        .btn-login {
+            width: 100%;
+            padding: 0.9rem;
+            background: #1e5fb0;
+            border: none;
+            border-radius: 60px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            font-family: 'Inter', sans-serif;
+            margin-top: 0.5rem;
+        }
+
+        .btn-login:hover {
+            background: #124a8a;
+        }
+
+        .btn-login:active {
+            transform: scale(0.97);
+        }
+
+        .btn-login i {
+            font-size: 0.95rem;
+        }
+
+        /* ===== ERREUR ===== */
+        #error {
+            margin-top: 1rem;
+            padding: 0.7rem 1rem;
+            border-radius: 60px;
+            font-size: 0.85rem;
+            text-align: center;
+            display: none;
+        }
+
+        #error.show {
+            display: block;
+        }
+
+        #error.error {
+            background: #fde8e8;
+            color: #c73b3b;
+            border: 1px solid #f5d0d0;
+        }
+
+        #error.success {
+            background: #e4f4eb;
+            color: #1a7a4f;
+            border: 1px solid #c5e6d4;
+        }
+
+        /* ===== FOOTER ===== */
+        .login-footer {
+            margin-top: 1.8rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e8eff8;
+            text-align: center;
+        }
+
+        .login-footer p {
+            font-size: 0.75rem;
+            color: #7b95b5;
+        }
+
+        .login-footer p i {
+            margin-right: 0.4rem;
+            color: #b0c4df;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 2rem 1.2rem 1.5rem;
+                border-radius: 1.5rem;
+            }
+
+            .login-header h1 {
+                font-size: 1.3rem;
+            }
+
+            .input-wrapper input {
+                font-size: 0.9rem;
+                padding: 0.7rem 1rem 0.7rem 0.5rem;
+            }
+
+            .btn-login {
+                font-size: 0.9rem;
+                padding: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <div class="login-card">
+
+            <!-- HEADER -->
+            <div class="login-header">
+                <div class="icon-wrapper">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h1>Accès Administrateur</h1>
+                <p>Connectez-vous pour gérer votre plateforme</p>
+            </div>
+
+            <!-- FORMULAIRE -->
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email"><i class="fas fa-envelope"></i> Adresse email</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon"><i class="fas fa-user"></i></span>
+                        <input type="email" id="email" placeholder="admin@email.com" required autocomplete="email" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password"><i class="fas fa-lock"></i> Mot de passe</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon"><i class="fas fa-key"></i></span>
+                        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password" />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-login">
+                    <i class="fas fa-sign-in-alt"></i> Se connecter
+                </button>
+
+                <div id="error"></div>
+            </form>
+
+            <!-- FOOTER -->
+            <div class="login-footer">
+                <p><i class="fas fa-info-circle"></i> Contactez l'administrateur si vous n'avez pas de compte</p>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script>
+        // ===== CONFIGURATION FIREBASE =====
+        const firebaseConfig = {
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+
+        // ✅ ACTIVER LA PERSISTANCE DE LA SESSION
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            .then(() => {
+                console.log('✅ Persistance activée');
+            })
+            .catch((error) => {
+                console.error('❌ Erreur persistance:', error);
+            });
+
+        const loginForm = document.getElementById('loginForm');
+        const errorDiv = document.getElementById('error');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            // Réinitialiser le message d'erreur
+            errorDiv.className = '';
+            errorDiv.textContent = '';
+            errorDiv.style.display = 'none';
+
+            // Validation basique
+            if (!email || !password) {
+                errorDiv.className = 'show error';
+                errorDiv.textContent = '⚠️ Veuillez remplir tous les champs.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                errorDiv.className = 'show success';
+                errorDiv.textContent = '⏳ Connexion en cours...';
+                errorDiv.style.display = 'block';
+
+                await firebase.auth().signInWithEmailAndPassword(email, password);
+
+                // Redirection vers le dashboard
+                window.location.href = 'dashboard.html';
+            } catch (err) {
+                let message = '❌ Erreur de connexion.';
+                if (err.code === 'auth/user-not-found') {
+                    message = '❌ Aucun compte trouvé avec cet email.';
+                } else if (err.code === 'auth/wrong-password') {
+                    message = '❌ Mot de passe incorrect.';
+                } else if (err.code === 'auth/invalid-email') {
+                    message = '❌ Email invalide.';
+                } else if (err.code === 'auth/too-many-requests') {
+                    message = '⚠️ Trop de tentatives. Réessayez plus tard.';
+                } else {
+                    message = '❌ ' + err.message;
+                }
+
+                errorDiv.className = 'show error';
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                console.error('Erreur Firebase:', err);
+            }
+        });
+    </script>
+
+</body>
+</html>

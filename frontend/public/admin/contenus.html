@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -46,8 +46,8 @@
                     </select>
                 </div>
                 <div class="form-group" id="priceField">
-                    <label>Prix (€) - pour contenu payant</label>
-                    <input type="number" id="contentPrice" placeholder="0.00" step="0.01" min="0">
+                    <label>Prix (FCFA) - pour contenu payant</label>
+                    <input type="number" id="contentPrice" placeholder="0" step="1" min="0">
                 </div>
                 <div class="form-group">
                     <label>Fichier</label>
@@ -64,40 +64,55 @@
     </main>
 
     <script>
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:5000' 
-            : 'https://votre-backend.onrender.com';
+        // ===== CONFIGURATION =====
+        const API_URL = 'https://epistrategix-backend.onrender.com';
 
         const firebaseConfig = {
-            apiKey: "VOTRE_API_KEY",
-            authDomain: "votre-project.firebaseapp.com",
-            projectId: "votre-project",
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
         };
-        firebase.initializeApp(firebaseConfig);
 
+        firebase.initializeApp(firebaseConfig);
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+        // ===== VÉRIFICATION AUTHENTIFICATION =====
         firebase.auth().onAuthStateChanged(async user => {
             if (!user) {
-                window.location.href = '../index.html';
+                console.log('🔴 Non authentifié, redirection vers login.html');
+                window.location.href = 'login.html';
                 return;
             }
-            const token = await user.getIdToken();
-            const response = await fetch(`${API_URL}/api/admin/kpi`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) {
-                alert('Accès non autorisé');
-                firebase.auth().signOut();
-                window.location.href = '../index.html';
-                return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/admin/kpi`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    alert('Accès non autorisé. Vous devez être administrateur.');
+                    firebase.auth().signOut();
+                    window.location.href = 'login.html';
+                    return;
+                }
+                
+                loadContents(token);
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de vérification des droits');
             }
-            loadContents(token);
         });
 
-        // Afficher/masquer le champ prix selon le type de tarif
+        // ===== AFFICHER/MASQUER LE CHAMP PRIX =====
         document.getElementById('contentPriceType').addEventListener('change', function() {
             document.getElementById('priceField').style.display = this.value === 'paid' ? 'block' : 'none';
         });
 
+        // ===== CHARGER LES CONTENUS =====
         async function loadContents(token) {
             try {
                 const response = await fetch(`${API_URL}/api/contents`);
@@ -114,7 +129,7 @@
                         <div>
                             <strong>${c.title}</strong>
                             <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
-                                ${c.priceType === 'free' ? '📄 Gratuit' : '💰 ' + c.price + ' €'}
+                                ${c.priceType === 'free' ? '📄 Gratuit' : '💰 ' + c.price + ' FCFA'}
                             </span>
                             <a href="${c.url}" target="_blank" style="margin-left:1rem; color:#1e5fb0;">
                                 <i class="fas fa-external-link-alt"></i>
@@ -130,6 +145,7 @@
             }
         }
 
+        // ===== UPLOADER UN CONTENU =====
         document.getElementById('contentForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
@@ -181,6 +197,7 @@
             }
         });
 
+        // ===== SUPPRIMER UN CONTENU =====
         window.deleteContent = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -206,9 +223,10 @@
             }
         };
 
+        // ===== DÉCONNEXION =====
         document.getElementById('logoutBtn').addEventListener('click', () => {
             firebase.auth().signOut();
-            window.location.href = '../index.html';
+            window.location.href = 'login.html';
         });
     </script>
 </body>

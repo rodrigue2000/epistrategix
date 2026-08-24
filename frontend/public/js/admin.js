@@ -1,10 +1,9 @@
  // ===== CONFIGURATION =====
 const API_URL = 'https://epistrategix-backend.onrender.com';
-const FRONTEND_URL = 'https://epistrategix.web.app';
 
 // Configuration Firebase
 const firebaseConfig = {
-    apiKey: "VOTRE_API_KEY",
+    apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
     authDomain: "epistrategix.firebaseapp.com",
     projectId: "epistrategix",
     storageBucket: "epistrategix.firebasestorage.app",
@@ -13,60 +12,83 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-// Vérifier l'authentification
+// ===== VÉRIFICATION DE L'AUTHENTIFICATION =====
 firebase.auth().onAuthStateChanged(async user => {
+    console.log('🔍 Auth state changed:', user ? 'Connecté' : 'Déconnecté');
+    
     if (!user) {
-        window.location.href = '../index.html';
+        console.log('🔴 Non authentifié, redirection vers login.html');
+        window.location.href = 'login.html';
         return;
     }
-    
+
     try {
+        console.log('🟢 Utilisateur connecté:', user.email);
         const token = await user.getIdToken();
+        console.log('✅ Token obtenu');
+        
+        // Vérifier le rôle admin
         const response = await fetch(`${API_URL}/api/admin/kpi`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (!response.ok) {
-            alert('Accès non autorisé');
+            console.log('⚠️ Accès non autorisé (pas admin)');
+            alert('Accès non autorisé. Vous devez être administrateur.');
             firebase.auth().signOut();
-            window.location.href = '../index.html';
+            window.location.href = 'login.html';
             return;
         }
         
+        console.log('✅ Admin vérifié, chargement des données...');
+        
+        // ===== CHARGEMENT DES KPI =====
         const kpi = await response.json();
-        document.getElementById('kpiServices').textContent = kpi.totalServices;
-        document.getElementById('kpiRevenue').textContent = kpi.totalRevenue + ' FCFA';
-        document.getElementById('kpiTransactions').textContent = kpi.totalTransactions;
-        document.getElementById('kpiPending').textContent = kpi.reservations.pending;
+        
+        // Mettre à jour les éléments du dashboard
+        const kpiServices = document.getElementById('kpiServices');
+        const kpiRevenue = document.getElementById('kpiRevenue');
+        const kpiTransactions = document.getElementById('kpiTransactions');
+        const kpiPending = document.getElementById('kpiPending');
+        
+        if (kpiServices) kpiServices.textContent = kpi.totalServices || 0;
+        if (kpiRevenue) kpiRevenue.textContent = (kpi.totalRevenue || 0) + ' FCFA';
+        if (kpiTransactions) kpiTransactions.textContent = kpi.totalTransactions || 0;
+        if (kpiPending) kpiPending.textContent = kpi.reservations?.pending || 0;
 
-        // Charger les réservations
+        // ===== CHARGEMENT DES RÉSERVATIONS =====
         const resResponse = await fetch(`${API_URL}/api/admin/reservations/export`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const reservations = await resResponse.json();
         const tbody = document.querySelector('#reservationsTable tbody');
-        tbody.innerHTML = '';
-        reservations.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${r.clientName}</td>
-                <td>${r.clientPhone}</td>
-                <td>${r.serviceId}</td>
-                <td>${r.date}</td>
-                <td>${r.time}</td>
-                <td>${r.status}</td>
-            `;
-            tbody.appendChild(tr);
-        });
+        if (tbody) {
+            tbody.innerHTML = '';
+            reservations.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.clientName || 'N/A'}</td>
+                    <td>${r.clientPhone || 'N/A'}</td>
+                    <td>${r.serviceId || 'N/A'}</td>
+                    <td>${r.date || 'N/A'}</td>
+                    <td>${r.time || 'N/A'}</td>
+                    <td>${r.status || 'pending'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        console.log('✅ Données chargées avec succès');
     } catch (error) {
-        console.error('Erreur:', error);
-        alert('Erreur de chargement des données');
+        console.error('❌ Erreur:', error);
+        alert('Erreur de chargement des données: ' + error.message);
     }
 });
 
-// Déconnexion
+// ===== DÉCONNEXION =====
 document.getElementById('logoutBtn')?.addEventListener('click', () => {
     firebase.auth().signOut();
-    window.location.href = '../index.html';
+    window.location.href = 'login.html';
 });

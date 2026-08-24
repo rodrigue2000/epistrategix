@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -42,8 +42,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Prix (€) - pour prix fixe uniquement</label>
-                    <input type="number" id="servicePrice" placeholder="0.00" step="0.01" min="0">
+                    <label>Prix (FCFA) - pour prix fixe uniquement</label>
+                    <input type="number" id="servicePrice" placeholder="0" step="1" min="0">
                 </div>
                 <div class="form-group">
                     <label>Durée (minutes)</label>
@@ -60,44 +60,55 @@
     </main>
 
     <script>
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:5000' 
-            : 'https://votre-backend.onrender.com';
+        // ===== CONFIGURATION =====
+        const API_URL = 'https://epistrategix-backend.onrender.com';
 
-        // Configuration Firebase
         const firebaseConfig = {
-            apiKey: "VOTRE_API_KEY",
-            authDomain: "votre-project.firebaseapp.com",
-            projectId: "votre-project",
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
         };
+
         firebase.initializeApp(firebaseConfig);
 
-        // Vérifier l'authentification
+        // Persistance de session
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+        // ===== VÉRIFICATION AUTHENTIFICATION =====
         firebase.auth().onAuthStateChanged(async user => {
             if (!user) {
-                window.location.href = '../index.html';
+                console.log('🔴 Non authentifié, redirection vers login.html');
+                window.location.href = 'login.html';
                 return;
             }
-            const token = await user.getIdToken();
-            // Vérifier les droits admin
-            const response = await fetch(`${API_URL}/api/admin/kpi`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) {
-                alert('Accès non autorisé');
-                firebase.auth().signOut();
-                window.location.href = '../index.html';
-                return;
-            }
-            loadServices(token);
-        });
 
-        // Charger les services
-        async function loadServices(token) {
             try {
-                const response = await fetch(`${API_URL}/api/services`, {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/admin/kpi`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!response.ok) {
+                    alert('Accès non autorisé. Vous devez être administrateur.');
+                    firebase.auth().signOut();
+                    window.location.href = 'login.html';
+                    return;
+                }
+                
+                loadServices(token);
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de vérification des droits');
+            }
+        });
+
+        // ===== CHARGER LES SERVICES =====
+        async function loadServices(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/services`);
                 const services = await response.json();
                 const container = document.getElementById('servicesList');
                 
@@ -111,7 +122,7 @@
                         <div>
                             <strong>${s.name}</strong>
                             <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
-                                ${s.priceType === 'fixed' ? s.price + ' €' : 'Prix libre'}
+                                ${s.priceType === 'fixed' ? s.price + ' FCFA' : 'Prix libre'}
                                 · ${s.duration || 60} min
                             </span>
                         </div>
@@ -130,7 +141,7 @@
             }
         }
 
-        // Ajouter un service
+        // ===== AJOUTER UN SERVICE =====
         document.getElementById('serviceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
@@ -176,7 +187,7 @@
             }
         });
 
-        // Modifier un service
+        // ===== MODIFIER UN SERVICE =====
         window.editService = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -193,7 +204,7 @@
 
                 const newName = prompt('Nouveau nom:', service.name);
                 if (newName === null) return;
-                const newPrice = prompt('Nouveau prix (€):', service.price);
+                const newPrice = prompt('Nouveau prix (FCFA):', service.price);
                 if (newPrice === null) return;
 
                 const updated = {
@@ -222,7 +233,7 @@
             }
         };
 
-        // Supprimer un service
+        // ===== SUPPRIMER UN SERVICE =====
         window.deleteService = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -248,10 +259,10 @@
             }
         };
 
-        // Déconnexion
+        // ===== DÉCONNEXION =====
         document.getElementById('logoutBtn').addEventListener('click', () => {
             firebase.auth().signOut();
-            window.location.href = '../index.html';
+            window.location.href = 'login.html';
         });
     </script>
 </body>
