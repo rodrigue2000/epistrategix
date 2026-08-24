@@ -11,6 +11,7 @@ router.post('/initiate', async (req, res) => {
   }
 
   try {
+    const fedapay = require('../config/fedapay');
     const response = await fedapay.post('/v1/transactions', {
       amount: Math.round(amount * 100),
       currency: 'XOF',

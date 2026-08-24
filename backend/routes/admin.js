@@ -55,4 +55,29 @@ router.get('/reservations/export', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+
+// ===== BLOCAGE MANUEL D'UN CRÉNEAU =====
+router.post('/block', verifyToken, isAdmin, async (req, res) => {
+  const { date, time, reason } = req.body;
+  
+  if (!date || !time) {
+    return res.status(400).json({ error: 'Date et heure requises' });
+  }
+  
+  try {
+    const block = {
+      date,
+      time,
+      reason: reason || 'Blocage manuel',
+      createdAt: new Date().toISOString(),
+      createdBy: req.user.uid,
+    };
+    
+    const docRef = await db.collection('blocks').add(block);
+    res.status(201).json({ id: docRef.id, ...block });
+  } catch (error) {
+    console.error('Erreur blocage:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 module.exports = router;

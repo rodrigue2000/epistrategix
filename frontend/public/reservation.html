@@ -6,6 +6,12 @@
     <title>Réservation - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://js.fedapay.com/fedapay-v2.js"></script>
+<script>
+    // Fallback si le CDN est bloqué
+    if (typeof FedaPay === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/fedapay-js@2/dist/fedapay.min.js"><\/script>');
+    }
+</script>
 </head>
 <body>
     <header>
