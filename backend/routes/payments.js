@@ -1,4 +1,4 @@
-const express = require('express');
+ const express = require('express');
 const { db } = require('../config/firebase');
 const fedapay = require('../config/fedapay');
 
@@ -11,14 +11,18 @@ router.post('/initiate', async (req, res) => {
   }
 
   try {
-    const fedapay = require('../config/fedapay');
+    const nameParts = (customerName || 'Client').trim().split(' ');
+    const firstname = nameParts[0];
+    const lastname = nameParts.slice(1).join(' ') || 'Client';
+
     const response = await fedapay.post('/v1/transactions', {
-      amount: Math.round(amount * 100),
-      currency: 'XOF',
+      amount: Math.round(amount),
+      currency: { iso: 'XOF' },
       description: `Paiement pour ${serviceName || 'service'}`,
       customer: {
         email: customerEmail || 'client@exemple.com',
-        name: customerName || 'Client',
+        firstname,
+        lastname,
       },
       callback_url: `${process.env.BASE_URL}/api/payments/callback`,
       metadata: {
@@ -27,7 +31,8 @@ router.post('/initiate', async (req, res) => {
     });
 
     const transaction = response.data;
-    await db.collection('transactions').doc(transaction.id).set({
+
+    await db.collection('transactions').doc(String(transaction.id)).set({
       reservationId,
       amount,
       status: transaction.status,
@@ -45,7 +50,9 @@ router.post('/initiate', async (req, res) => {
       url: transaction.url,
     });
   } catch (error) {
-    console.error('Erreur FedaPay:', error.response?.data || error.message);
+    console.error('Erreur FedaPay - status:', error.response?.status);
+    console.error('Erreur FedaPay - data:', JSON.stringify(error.response?.data));
+    console.error('Erreur FedaPay - message:', error.message);
     res.status(500).json({ error: 'Erreur lors de l\'initialisation du paiement' });
   }
 });

@@ -2,8 +2,7 @@
 const API_URL = 'https://epistrategix-backend.onrender.com';
 
 // ===== FEDAPAY CONFIGURATION =====
-// ✅ Utilisez votre clé PUBLIQUE LIVE (ou sandbox pour les tests)
-const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is'; // ← REMPLACEZ PAR VOTRE CLÉ PUBLIQUE LIVE
+const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is';
 
 // Charger les services
 fetch(`${API_URL}/api/services`)
@@ -88,42 +87,38 @@ async function initiatePayment(reservationId, amount, customerName, serviceName)
             serviceName
         })
     });
-    
+
     const data = await response.json();
-    
+
     if (!response.ok) {
         alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
         return;
     }
-    
-    // 2. Ouvrir le modal FedaPay avec la clé publique
+
+    // 2. Ouvrir le widget FedaPay avec la clé publique
     try {
-        const fedapay = new FedaPay({
-            public_key: FEDAPAY_PUBLIC_KEY,  // ← Votre clé publique
-            currency: 'XOF',                  // ← FCFA
-            amount: Math.round(amount * 100), // ← Montant en centimes
-            description: `Paiement pour ${serviceName}`,
+        const widget = FedaPay.init({
+            public_key: FEDAPAY_PUBLIC_KEY,
+            transaction: {
+                amount: Math.round(amount), // pas de * 100, le XOF n'a pas de sous-unité
+                description: `Paiement pour ${serviceName}`
+            },
             customer: {
                 email: 'client@exemple.com',
-                name: customerName
+                firstname: customerName.split(' ')[0],
+                lastname: customerName.split(' ').slice(1).join(' ') || customerName.split(' ')[0]
             },
-            onSuccess: function(response) {
-                // ✅ Paiement réussi
-                console.log('✅ Paiement réussi:', response);
-                alert('✅ Paiement effectué avec succès ! Vous recevrez un email de confirmation.');
-                window.location.href = '/confirmation.html?status=success';
-            },
-            onError: function(error) {
-                // ❌ Erreur de paiement
-                console.error('❌ Erreur FedaPay:', error);
-                alert('❌ Erreur de paiement: ' + (error.message || 'Veuillez réessayer.'));
-            },
-            onClose: function() {
-                // 👆 Modal fermé par l'utilisateur
-                console.log('👆 Fenêtre de paiement fermée');
+            onComplete: function(response) {
+                if (response.reason === FedaPay.CHECKOUT_COMPLETED) {
+                    console.log('✅ Paiement réussi:', response.transaction);
+                    alert('✅ Paiement effectué avec succès ! Vous recevrez un email de confirmation.');
+                    window.location.href = '/confirmation.html?status=success';
+                } else if (response.reason === FedaPay.DIALOG_DISMISSED) {
+                    console.log('👆 Fenêtre de paiement fermée');
+                }
             }
         });
-        fedapay.open();
+        widget.open();
     } catch (error) {
         console.error('❌ Erreur FedaPay:', error);
         alert('❌ Erreur lors de l\'ouverture du paiement: ' + error.message);

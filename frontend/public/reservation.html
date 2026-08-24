@@ -1,17 +1,70 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Réservation - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://js.fedapay.com/fedapay-v2.js"></script>
-<script>
-    // Fallback si le CDN est bloqué
-    if (typeof FedaPay === 'undefined') {
-        document.write('<script src="https://cdn.jsdelivr.net/npm/fedapay-js@2/dist/fedapay.min.js"><\/script>');
-    }
-</script>
+    <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
+            <nav>
+                <a href="index.html">Accueil</a>
+                <a href="reservation.html">Réserver</a>
+                <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="admin/dashboard.html" class="btn-admin">Admin</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>Réserver un créneau</h2>
+            <form id="reservationForm">
+                <div class="form-group">
+                    <label>Service</label>
+                    <select id="serviceSelect" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Nom complet</label>
+                    <input type="text" id="clientName" required>
+                </div>
+                <div class="form-group">
+                    <label>Numéro WhatsApp</label>
+                    <input type="tel" id="clientPhone" required>
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="reservationDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Heure</label>
+                    <select id="reservationTime" required>
+                        <option value="">-- Choisir une heure --</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Continuer vers le paiement</button>
+            </form>
+            <div id="paymentSection" style="display:none;">
+                <p>Montant à payer : <span id="amountToPay">0</span> FCFA</p>
+                <button id="payButton" class="btn btn-success">Payer avec FedaPay</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/reservation.js"></script>
+</body>
+</html><!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Réservation - EpiStrategix</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
 </head>
 <body>
     <header>
