@@ -30,7 +30,10 @@ router.post('/initiate', async (req, res) => {
       },
     });
 
-    const transaction = response.data;
+    const transaction = response.data['v1/transaction'];
+    if (!transaction || !transaction.id) {
+  throw new Error('Réponse FedaPay inattendue: ' + JSON.stringify(response.data));
+}
 
     await db.collection('transactions').doc(String(transaction.id)).set({
       reservationId,
