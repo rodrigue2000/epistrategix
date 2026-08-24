@@ -54,51 +54,17 @@
         </div>
     </main>
 
+    <script src="../js/admin.js"></script>
     <script>
-        // ===== CONFIGURATION =====
+        // ===== CODE SPÉCIFIQUE CALENDRIER =====
         const API_URL = 'https://epistrategix-backend.onrender.com';
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
-            authDomain: "epistrategix.firebaseapp.com",
-            projectId: "epistrategix",
-            storageBucket: "epistrategix.firebasestorage.app",
-            messagingSenderId: "469383955380",
-            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
-        };
-
-        firebase.initializeApp(firebaseConfig);
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-        // ===== VÉRIFICATION AUTHENTIFICATION =====
-        firebase.auth().onAuthStateChanged(async user => {
-            if (!user) {
-                console.log('🔴 Non authentifié, redirection vers login.html');
-                window.location.href = 'login.html';
-                return;
-            }
-
-            try {
-                const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/admin/kpi`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!response.ok) {
-                    alert('Accès non autorisé. Vous devez être administrateur.');
-                    firebase.auth().signOut();
-                    window.location.href = 'login.html';
-                    return;
-                }
-                
-                loadReservations(token);
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur de vérification des droits');
-            }
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return;
+            const token = await user.getIdToken();
+            loadReservations(token);
         });
 
-        // ===== CHARGER LES RÉSERVATIONS =====
         async function loadReservations(token) {
             try {
                 const response = await fetch(`${API_URL}/api/admin/reservations/export`, {
@@ -138,7 +104,7 @@
             }
         }
 
-        // ===== METTRE À JOUR LE STATUT =====
+        // Mettre à jour le statut
         window.updateStatus = async function(id, status) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -166,7 +132,7 @@
             }
         };
 
-        // ===== BLOCAGE MANUEL =====
+        // Blocage manuel
         document.getElementById('blockForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
@@ -203,12 +169,6 @@
             } catch (error) {
                 alert('Erreur: ' + error.message);
             }
-        });
-
-        // ===== DÉCONNEXION =====
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            firebase.auth().signOut();
-            window.location.href = 'login.html';
         });
     </script>
 </body>

@@ -59,53 +59,18 @@
         </div>
     </main>
 
+    <script src="../js/admin.js"></script>
     <script>
-        // ===== CONFIGURATION =====
+        // ===== CODE SPÉCIFIQUE SERVICES =====
         const API_URL = 'https://epistrategix-backend.onrender.com';
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
-            authDomain: "epistrategix.firebaseapp.com",
-            projectId: "epistrategix",
-            storageBucket: "epistrategix.firebasestorage.app",
-            messagingSenderId: "469383955380",
-            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
-        };
-
-        firebase.initializeApp(firebaseConfig);
-
-        // Persistance de session
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-        // ===== VÉRIFICATION AUTHENTIFICATION =====
-        firebase.auth().onAuthStateChanged(async user => {
-            if (!user) {
-                console.log('🔴 Non authentifié, redirection vers login.html');
-                window.location.href = 'login.html';
-                return;
-            }
-
-            try {
-                const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/admin/kpi`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!response.ok) {
-                    alert('Accès non autorisé. Vous devez être administrateur.');
-                    firebase.auth().signOut();
-                    window.location.href = 'login.html';
-                    return;
-                }
-                
-                loadServices(token);
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur de vérification des droits');
-            }
+        // Attendre que Firebase soit prêt
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return; // admin.js gère la redirection
+            const token = await user.getIdToken();
+            loadServices(token);
         });
 
-        // ===== CHARGER LES SERVICES =====
         async function loadServices(token) {
             try {
                 const response = await fetch(`${API_URL}/api/services`);
@@ -141,8 +106,8 @@
             }
         }
 
-        // ===== AJOUTER UN SERVICE =====
-        document.getElementById('serviceForm').addEventListener('submit', async (e) => {
+        // Ajouter un service
+        document.getElementById('serviceForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -187,7 +152,7 @@
             }
         });
 
-        // ===== MODIFIER UN SERVICE =====
+        // Modifier un service
         window.editService = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -233,7 +198,7 @@
             }
         };
 
-        // ===== SUPPRIMER UN SERVICE =====
+        // Supprimer un service
         window.deleteService = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -258,12 +223,6 @@
                 alert('Erreur: ' + error.message);
             }
         };
-
-        // ===== DÉCONNEXION =====
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            firebase.auth().signOut();
-            window.location.href = 'login.html';
-        });
     </script>
 </body>
 </html>

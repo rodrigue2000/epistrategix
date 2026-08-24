@@ -41,7 +41,6 @@
             transform: translateY(-2px);
         }
 
-        /* ===== HEADER ===== */
         .login-header {
             text-align: center;
             margin-bottom: 2rem;
@@ -76,7 +75,6 @@
             margin-top: 0.3rem;
         }
 
-        /* ===== FORMULAIRE ===== */
         .form-group {
             margin-bottom: 1.2rem;
         }
@@ -135,7 +133,6 @@
             font-weight: 400;
         }
 
-        /* ===== BOUTON ===== */
         .btn-login {
             width: 100%;
             padding: 0.9rem;
@@ -163,11 +160,6 @@
             transform: scale(0.97);
         }
 
-        .btn-login i {
-            font-size: 0.95rem;
-        }
-
-        /* ===== ERREUR ===== */
         #error {
             margin-top: 1rem;
             padding: 0.7rem 1rem;
@@ -193,7 +185,6 @@
             border: 1px solid #c5e6d4;
         }
 
-        /* ===== FOOTER ===== */
         .login-footer {
             margin-top: 1.8rem;
             padding-top: 1.5rem;
@@ -211,22 +202,18 @@
             color: #b0c4df;
         }
 
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 480px) {
             .login-card {
                 padding: 2rem 1.2rem 1.5rem;
                 border-radius: 1.5rem;
             }
-
             .login-header h1 {
                 font-size: 1.3rem;
             }
-
             .input-wrapper input {
                 font-size: 0.9rem;
                 padding: 0.7rem 1rem 0.7rem 0.5rem;
             }
-
             .btn-login {
                 font-size: 0.9rem;
                 padding: 0.8rem;
@@ -239,7 +226,6 @@
     <div class="login-container">
         <div class="login-card">
 
-            <!-- HEADER -->
             <div class="login-header">
                 <div class="icon-wrapper">
                     <i class="fas fa-shield-alt"></i>
@@ -248,7 +234,6 @@
                 <p>Connectez-vous pour gérer votre plateforme</p>
             </div>
 
-            <!-- FORMULAIRE -->
             <form id="loginForm">
                 <div class="form-group">
                     <label for="email"><i class="fas fa-envelope"></i> Adresse email</label>
@@ -273,7 +258,6 @@
                 <div id="error"></div>
             </form>
 
-            <!-- FOOTER -->
             <div class="login-footer">
                 <p><i class="fas fa-info-circle"></i> Contactez l'administrateur si vous n'avez pas de compte</p>
             </div>
@@ -296,14 +280,10 @@
 
         firebase.initializeApp(firebaseConfig);
 
-        // ✅ ACTIVER LA PERSISTANCE DE LA SESSION
+        // ✅ Persistance
         firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-            .then(() => {
-                console.log('✅ Persistance activée');
-            })
-            .catch((error) => {
-                console.error('❌ Erreur persistance:', error);
-            });
+            .then(() => console.log('✅ Persistance activée'))
+            .catch(err => console.error('❌ Erreur persistance:', err));
 
         const loginForm = document.getElementById('loginForm');
         const errorDiv = document.getElementById('error');
@@ -313,12 +293,10 @@
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
 
-            // Réinitialiser le message d'erreur
             errorDiv.className = '';
             errorDiv.textContent = '';
             errorDiv.style.display = 'none';
 
-            // Validation basique
             if (!email || !password) {
                 errorDiv.className = 'show error';
                 errorDiv.textContent = '⚠️ Veuillez remplir tous les champs.';
@@ -332,8 +310,6 @@
                 errorDiv.style.display = 'block';
 
                 await firebase.auth().signInWithEmailAndPassword(email, password);
-
-                // Redirection vers le dashboard
                 window.location.href = 'dashboard.html';
             } catch (err) {
                 let message = '❌ Erreur de connexion.';

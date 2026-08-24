@@ -63,56 +63,22 @@
         </div>
     </main>
 
+    <script src="../js/admin.js"></script>
     <script>
-        // ===== CONFIGURATION =====
+        // ===== CODE SPÉCIFIQUE CONTENUS =====
         const API_URL = 'https://epistrategix-backend.onrender.com';
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
-            authDomain: "epistrategix.firebaseapp.com",
-            projectId: "epistrategix",
-            storageBucket: "epistrategix.firebasestorage.app",
-            messagingSenderId: "469383955380",
-            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
-        };
-
-        firebase.initializeApp(firebaseConfig);
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-        // ===== VÉRIFICATION AUTHENTIFICATION =====
-        firebase.auth().onAuthStateChanged(async user => {
-            if (!user) {
-                console.log('🔴 Non authentifié, redirection vers login.html');
-                window.location.href = 'login.html';
-                return;
-            }
-
-            try {
-                const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/admin/kpi`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!response.ok) {
-                    alert('Accès non autorisé. Vous devez être administrateur.');
-                    firebase.auth().signOut();
-                    window.location.href = 'login.html';
-                    return;
-                }
-                
-                loadContents(token);
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur de vérification des droits');
-            }
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return;
+            const token = await user.getIdToken();
+            loadContents(token);
         });
 
-        // ===== AFFICHER/MASQUER LE CHAMP PRIX =====
+        // Afficher/masquer le champ prix
         document.getElementById('contentPriceType').addEventListener('change', function() {
             document.getElementById('priceField').style.display = this.value === 'paid' ? 'block' : 'none';
         });
 
-        // ===== CHARGER LES CONTENUS =====
         async function loadContents(token) {
             try {
                 const response = await fetch(`${API_URL}/api/contents`);
@@ -145,7 +111,6 @@
             }
         }
 
-        // ===== UPLOADER UN CONTENU =====
         document.getElementById('contentForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
@@ -197,7 +162,6 @@
             }
         });
 
-        // ===== SUPPRIMER UN CONTENU =====
         window.deleteContent = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -222,12 +186,6 @@
                 alert('Erreur: ' + error.message);
             }
         };
-
-        // ===== DÉCONNEXION =====
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            firebase.auth().signOut();
-            window.location.href = 'login.html';
-        });
     </script>
 </body>
 </html>
