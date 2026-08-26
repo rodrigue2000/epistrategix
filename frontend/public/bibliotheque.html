@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -27,9 +27,7 @@
             <p style="color:#3e6188; margin-bottom:1.2rem;">
                 Téléchargez des ressources gratuites ou achetez des contenus premium.
             </p>
-            <div id="contentsList" class="grid">
-                <!-- Contenus chargés dynamiquement -->
-            </div>
+            <div id="contentsList" class="grid"></div>
         </div>
     </main>
 
@@ -39,9 +37,7 @@
         </div>
     </footer>
 
-    <!-- ================================================================ -->
     <!-- MODALE DE CONFIRMATION D'ACHAT -->
-    <!-- ================================================================ -->
     <div id="purchaseModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
         <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
             <div style="font-size:4rem; color:#1f9a6e; margin-bottom:1rem;">
@@ -61,9 +57,6 @@
     </div>
 
     <script>
-        // ================================================================
-        // CONFIGURATION
-        // ================================================================
         const API_URL = 'https://epistrategix-backend.onrender.com';
         const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is';
 
@@ -134,18 +127,15 @@
         }
 
         // ================================================================
-        // GESTION DE L'ACTION SUR UN CONTENU (VERSION CORRIGÉE)
+        // GESTION DE L'ACTION SUR UN CONTENU
         // ================================================================
         async function handleContentAction(contentId, priceType, price, url, title) {
             if (priceType === 'free') {
-                // ✅ Contenu gratuit → téléchargement direct
                 window.open(url, '_blank');
                 return;
             }
 
-            // 🔒 Contenu payant → paiement FedaPay
             try {
-                // 1. Créer la transaction sur le backend
                 const response = await fetch(`${API_URL}/api/contents/purchase`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -163,13 +153,11 @@
                     return;
                 }
 
-                // 2. Vérifier que FedaPay est chargé
                 if (typeof FedaPay === 'undefined') {
                     alert('❌ Le système de paiement n\'est pas disponible. Veuillez rafraîchir la page.');
                     return;
                 }
 
-                // ✅ Utiliser FedaPay.init (compatible avec checkout.js)
                 const widget = FedaPay.init({
                     public_key: FEDAPAY_PUBLIC_KEY,
                     transaction: {
@@ -206,13 +194,15 @@
             const downloadLink = document.getElementById('downloadLink');
             
             if (modal && downloadLink) {
-                downloadLink.href = url;
+                // ✅ Ajouter ?dl=1 pour forcer le téléchargement
+                const downloadUrl = url.includes('?') ? `${url}&dl=1` : `${url}?dl=1`;
+                downloadLink.href = downloadUrl;
+                downloadLink.download = `${title || 'fichier'}.pdf`;
                 downloadLink.textContent = `📥 Télécharger ${title || 'le contenu'}`;
                 modal.style.display = 'flex';
                 
-                // Ouvrir automatiquement le téléchargement après 1s
                 setTimeout(() => {
-                    window.open(url, '_blank');
+                    window.open(downloadUrl, '_blank');
                 }, 1000);
             }
         }
@@ -224,21 +214,9 @@
             document.getElementById('purchaseModal').style.display = 'none';
         }
 
-        // Fermer la modale en cliquant à l'extérieur
         document.getElementById('purchaseModal')?.addEventListener('click', function(e) {
             if (e.target === this) {
                 closePurchaseModal();
-            }
-        });
-
-        // ================================================================
-        // VÉRIFIER QUE FEDAPAY EST CHARGÉ
-        // ================================================================
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof FedaPay === 'undefined') {
-                console.warn('⚠️ FedaPay non chargé, tentative de rechargement...');
-            } else {
-                console.log('✅ FedaPay chargé avec succès');
             }
         });
     </script>

@@ -27,7 +27,6 @@
         <div class="container">
             <h2>Créer un nouveau service</h2>
             <form id="serviceForm">
-                <!-- ===== INFOS GÉNÉRALES ===== -->
                 <div class="form-group">
                     <label>Nom du service</label>
                     <input type="text" id="serviceName" required placeholder="ex: Consulting stratégique">
@@ -36,8 +35,6 @@
                     <label>Description</label>
                     <textarea id="serviceDescription" placeholder="Description du service..."></textarea>
                 </div>
-
-                <!-- ===== TYPE DE TARIF ===== -->
                 <div class="form-group">
                     <label>Type de tarif</label>
                     <select id="priceType">
@@ -46,23 +43,16 @@
                         <option value="unit">Tarification à l'unité de temps</option>
                     </select>
                 </div>
-
-                <!-- ===== SECTION PRIX FIXE ===== -->
                 <div class="form-group" id="fixedPriceSection">
                     <label>Prix (FCFA) - pour prix fixe uniquement</label>
                     <input type="number" id="servicePrice" placeholder="0" step="1" min="0">
                 </div>
-
-                <!-- ===== SECTION TARIFICATION UNITAIRE ===== -->
                 <div id="unitPriceSection" style="display:none; border:1px solid #dce7f5; border-radius:1rem; padding:1rem; margin-bottom:1rem; background:#f8faff;">
                     <h4 style="color:#0a2647; margin-bottom:0.8rem;">⚡ Tarification à l'unité de temps</h4>
-                    
                     <div class="form-group">
                         <label>Prix par unité de temps (FCFA)</label>
                         <input type="number" id="unitPrice" placeholder="25000" step="1" min="0">
-                        <small style="color:#4d6f94;">Ex: 25 000 FCFA par heure</small>
                     </div>
-                    
                     <div class="form-group">
                         <label>Durée d'une unité (minutes)</label>
                         <select id="durationUnit">
@@ -74,35 +64,27 @@
                             <option value="120">2 heures (120 min)</option>
                         </select>
                     </div>
-                    
                     <div style="display:flex; gap:1rem; flex-wrap:wrap;">
                         <div class="form-group" style="flex:1; min-width:100px;">
                             <label>Durée minimale (unités)</label>
                             <input type="number" id="minDuration" value="1" min="1" step="1">
-                            <small style="color:#4d6f94;">Minimum 1 unité</small>
                         </div>
                         <div class="form-group" style="flex:1; min-width:100px;">
                             <label>Durée maximale (unités)</label>
                             <input type="number" id="maxDuration" value="4" min="1" step="1">
-                            <small style="color:#4d6f94;">Ex: 4 heures max</small>
                         </div>
                     </div>
                 </div>
-
-                <!-- ===== DURÉE PAR DÉFAUT ===== -->
                 <div class="form-group">
-                    <label>Durée par défaut (minutes) - pour les services à prix fixe</label>
+                    <label>Durée par défaut (minutes)</label>
                     <input type="number" id="serviceDuration" value="60" min="15" step="15">
-                    <small style="color:#4d6f94;">Pour la tarification unitaire, cette valeur est remplacée par l'unité choisie.</small>
                 </div>
-
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-plus-circle"></i> Ajouter le service
                 </button>
                 <div id="formError" style="color:#c73b3b; margin-top:0.5rem; display:none;"></div>
             </form>
 
-            <!-- ===== LISTE DES SERVICES EXISTANTS ===== -->
             <h3 style="margin-top: 2rem;">Services existants</h3>
             <div id="servicesList"></div>
         </div>
@@ -111,38 +93,12 @@
     <script src="../js/admin.js"></script>
     <script>
         // ================================================================
-        // CODE SPÉCIFIQUE SERVICES
-        // ================================================================
-
-        const API_URL = 'https://epistrategix-backend.onrender.com';
-
-        // ================================================================
         // AFFICHER/MASQUER LES SECTIONS SELON LE TYPE DE TARIF
         // ================================================================
         document.getElementById('priceType').addEventListener('change', function() {
             const value = this.value;
             document.getElementById('fixedPriceSection').style.display = value === 'fixed' ? 'block' : 'none';
             document.getElementById('unitPriceSection').style.display = value === 'unit' ? 'block' : 'none';
-            
-            // Mettre à jour le label de la durée
-            const durationLabel = document.querySelector('label[for="serviceDuration"]');
-            if (value === 'unit') {
-                durationLabel.textContent = 'Durée par défaut (remplacée par l\'unité)';
-            } else {
-                durationLabel.textContent = 'Durée par défaut (minutes)';
-            }
-        });
-
-        // ================================================================
-        // AUTHENTIFICATION
-        // ================================================================
-        firebase.auth().onAuthStateChanged(async (user) => {
-            if (!user) {
-                window.location.href = 'login.html';
-                return;
-            }
-            const token = await user.getIdToken();
-            loadServices(token);
         });
 
         // ================================================================
@@ -170,7 +126,6 @@
                     } else {
                         priceDisplay = 'Prix libre';
                     }
-                    
                     return `
                     <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
                         <div>
@@ -198,9 +153,21 @@
         }
 
         // ================================================================
+        // AUTHENTIFICATION
+        // ================================================================
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+            const token = await user.getIdToken();
+            loadServices(token);
+        });
+
+        // ================================================================
         // AJOUTER UN SERVICE
         // ================================================================
-        document.getElementById('serviceForm').addEventListener('submit', async (e) => {
+        document.getElementById('serviceForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const user = firebase.auth().currentUser;
             if (!user) return;
@@ -215,14 +182,12 @@
             errorDiv.style.display = 'none';
             errorDiv.textContent = '';
 
-            // Validation
             if (!name) {
                 errorDiv.textContent = '⚠️ Le nom est requis.';
                 errorDiv.style.display = 'block';
                 return;
             }
 
-            // Construction du payload
             const payload = { name, description, priceType, duration };
 
             if (priceType === 'fixed') {
@@ -254,7 +219,6 @@
                 payload.maxDuration = maxDuration;
                 payload.price = null;
             } else {
-                // free
                 payload.price = null;
             }
 

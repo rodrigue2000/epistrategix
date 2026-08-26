@@ -27,9 +27,6 @@
         <div class="container">
             <h2>Disponibilités et réservations</h2>
             
-            <!-- ============================================================ -->
-            <!-- SECTION BLOCAGE MANUEL (PLAGE HORAIRE) -->
-            <!-- ============================================================ -->
             <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
                 <h3>🔒 Blocage manuel d'une plage horaire</h3>
                 <form id="blockForm" style="max-width:100%; padding:1rem 0;">
@@ -58,9 +55,6 @@
                 </form>
             </div>
 
-            <!-- ============================================================ -->
-            <!-- SECTION LISTE DES BLOCAGES -->
-            <!-- ============================================================ -->
             <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
                 <h3>📋 Plages horaires bloquées</h3>
                 <div id="blocksList">
@@ -68,9 +62,6 @@
                 </div>
             </div>
 
-            <!-- ============================================================ -->
-            <!-- SECTION LISTE DES RÉSERVATIONS -->
-            <!-- ============================================================ -->
             <h3>📋 Réservations à venir</h3>
             <div id="reservationsList"></div>
         </div>
@@ -81,8 +72,6 @@
         // ================================================================
         // CODE SPÉCIFIQUE CALENDRIER
         // ================================================================
-
-        const API_URL = 'https://epistrategix-backend.onrender.com';
 
         // ================================================================
         // AUTHENTIFICATION
@@ -124,7 +113,6 @@
                             <span style="margin-left:1rem; padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${r.status === 'paid' ? '#d4edda' : r.status === 'pending' ? '#fff3cd' : r.status === 'confirmed' ? '#cce5ff' : '#f8d7da'}; color:${r.status === 'paid' ? '#155724' : r.status === 'pending' ? '#856404' : r.status === 'confirmed' ? '#004085' : '#721c24'};">
                                 ${r.status}
                             </span>
-                            ${r.amount ? `<span style="margin-left:0.5rem; font-weight:600; color:#1e5fb0;">${r.amount} FCFA</span>` : ''}
                         </div>
                         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                             ${r.status !== 'confirmed' && r.status !== 'cancelled' ? `
@@ -156,8 +144,6 @@
 
             try {
                 const token = await user.getIdToken();
-                
-                // Appeler la route PUT /reservations/:id/status
                 const response = await fetch(`${API_URL}/api/admin/reservations/${id}/status`, {
                     method: 'PUT',
                     headers: {
@@ -174,12 +160,10 @@
 
                 const data = await response.json();
                 
-                // ✅ Si confirmation ou annulation, ouvrir WhatsApp
                 if (status === 'confirmed' || status === 'cancelled') {
                     await openWhatsAppModal(id, status);
                 }
                 
-                // Recharger les réservations
                 loadReservations(token);
 
             } catch (error) {
@@ -207,7 +191,6 @@
                 }
                 
                 if (data.whatsappLink) {
-                    // Ouvrir WhatsApp dans un nouvel onglet
                     window.open(data.whatsappLink, '_blank');
                 } else {
                     alert('⚠️ Numéro de téléphone non disponible pour ce client.');
@@ -215,7 +198,7 @@
             } catch (error) {
                 console.error('Erreur WhatsApp:', error);
             }
-        };
+        }
 
         // ================================================================
         // CHARGER LES BLOCAGES
@@ -297,7 +280,6 @@
             const reason = document.getElementById('blockReason').value || 'Blocage administratif';
             const errorDiv = document.getElementById('blockError');
 
-            // Validation
             if (!date || !startTime || !endTime) {
                 errorDiv.textContent = '⚠️ Veuillez remplir tous les champs.';
                 errorDiv.style.display = 'block';

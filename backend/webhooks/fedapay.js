@@ -32,9 +32,14 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
   try {
     const event = JSON.parse(payload);
-    const transaction = event.data;
+    // ✅ Récupérer la transaction (peut être dans v1/transaction)
+    const transaction = event.data['v1/transaction'] || event.data;
 
     console.log(`📋 Événement reçu: ${event.name} - Transaction: ${transaction.id}`);
+
+    // ✅ Convertir le montant (centimes → FCFA)
+    // FedaPay retourne toujours en centimes, donc on divise par 100
+    const amountInFCFA = transaction.amount ;
 
     // ============================================================
     // 2. TRANSACTION APPROUVÉE (paiement réussi)
@@ -43,12 +48,13 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       console.log('✅ Transaction approuvée:', transaction.id);
 
       // 2.1 Mettre à jour la transaction dans Firestore
-      await db.collection('transactions').doc(transaction.id).update({
+      await db.collection('transactions').doc(String(transaction.id)).update({
         status: 'approved',
+        amount: amountInFCFA,
         updatedAt: new Date().toISOString(),
         webhookReceivedAt: new Date().toISOString(),
       });
-      console.log('✅ Transaction mise à jour dans Firestore');
+      console.log(`✅ Transaction ${transaction.id} mise à jour (${amountInFCFA} FCFA)`);
 
       // 2.2 Récupérer les métadonnées
       const metadata = transaction.metadata || {};
@@ -62,23 +68,16 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       if (reservationId) {
         console.log(`📋 Mise à jour de la réservation: ${reservationId}`);
         
-        // Vérifier que la réservation existe
         const reservationDoc = await db.collection('reservations').doc(reservationId).get();
         if (reservationDoc.exists) {
-          const reservation = reservationDoc.data();
-          
-          // Mettre à jour le statut et le montant
           await db.collection('reservations').doc(reservationId).update({
             status: 'paid',
-            amount: transaction.amount / 100, // Convertir les centimes en unité
-            transactionId: transaction.id,
+            amount: amountInFCFA,
+            transactionId: String(transaction.id),
             paidAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           });
-          console.log(`✅ Réservation ${reservationId} marquée comme payée`);
-          
-          // 🔔 Optionnel: Envoyer une notification WhatsApp au client
-          // await sendPaymentConfirmation(reservation.clientPhone, reservation, transaction.amount / 100);
+          console.log(`✅ Réservation ${reservationId} marquée comme payée (${amountInFCFA} FCFA)`);
         } else {
           console.warn(`⚠️ Réservation ${reservationId} non trouvée`);
         }
@@ -90,26 +89,24 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       if (contentType === 'content_purchase' && contentId) {
         console.log(`📋 Achat de contenu: ${contentId}`);
         
-        // Vérifier que le contenu existe
         const contentDoc = await db.collection('contents').doc(contentId).get();
         if (contentDoc.exists) {
           const content = contentDoc.data();
           
-          // Enregistrer l'achat dans purchased_content
           await db.collection('purchased_content').add({
             contentId: contentId,
-            contentTitle: content.title,
-            transactionId: transaction.id,
+            contentTitle: content.title || 'Contenu',
+            transactionId: String(transaction.id),
             customerEmail: transaction.customer?.email || 'client@exemple.com',
             customerName: transaction.customer?.name || 'Client',
-            amount: transaction.amount / 100,
+            amount: amountInFCFA,
             purchasedAt: new Date().toISOString(),
           });
-          console.log(`✅ Contenu ${contentId} acheté avec succès`);
+          console.log(`✅ Contenu ${contentId} acheté avec succès (${amountInFCFA} FCFA)`);
           
-          // Mettre à jour le compteur de ventes du contenu
+          // ✅ Mettre à jour le compteur de ventes (sans admin.firestore)
           await db.collection('contents').doc(contentId).update({
-            salesCount: admin.firestore.FieldValue.increment(1),
+            salesCount: (content.salesCount || 0) + 1,
             updatedAt: new Date().toISOString(),
           });
         } else {
@@ -130,7 +127,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     } else if (event.name === 'transaction.declined') {
       console.log(`⚠️ Transaction déclinée: ${transaction.id}`);
       
-      await db.collection('transactions').doc(transaction.id).update({
+      await db.collection('transactions').doc(String(transaction.id)).update({
         status: 'declined',
         updatedAt: new Date().toISOString(),
         webhookReceivedAt: new Date().toISOString(),
@@ -142,11 +139,10 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     // ============================================================
     } else if (event.name === 'transaction.created') {
       console.log(`📋 Transaction créée: ${transaction.id}`);
-      // On ne fait rien de particulier, juste un log
       
     } else if (event.name === 'transaction.refunded') {
       console.log(`💰 Transaction remboursée: ${transaction.id}`);
-      await db.collection('transactions').doc(transaction.id).update({
+      await db.collection('transactions').doc(String(transaction.id)).update({
         status: 'refunded',
         updatedAt: new Date().toISOString(),
       });
@@ -155,7 +151,6 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       console.log(`ℹ️ Événement non géré: ${event.name}`);
     }
 
-    // 5. Accuser réception du webhook
     res.sendStatus(200);
 
   } catch (error) {
@@ -166,7 +161,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 });
 
 // ============================================================
-// ROUTE DE TEST DU WEBHOOK (optionnelle)
+// ROUTE DE TEST DU WEBHOOK
 // ============================================================
 router.get('/test', (req, res) => {
   res.json({
