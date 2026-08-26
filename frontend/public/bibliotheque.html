@@ -6,7 +6,7 @@
     <title>Bibliothèque - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-   <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
+    <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
 </head>
 <body>
     <header>
@@ -134,7 +134,7 @@
         }
 
         // ================================================================
-        // GESTION DE L'ACTION SUR UN CONTENU
+        // GESTION DE L'ACTION SUR UN CONTENU (VERSION CORRIGÉE)
         // ================================================================
         async function handleContentAction(contentId, priceType, price, url, title) {
             if (priceType === 'free') {
@@ -163,30 +163,34 @@
                     return;
                 }
 
-                // 2. Ouvrir FedaPay
-                const fedapay = new FedaPay({
+                // 2. Vérifier que FedaPay est chargé
+                if (typeof FedaPay === 'undefined') {
+                    alert('❌ Le système de paiement n\'est pas disponible. Veuillez rafraîchir la page.');
+                    return;
+                }
+
+                // ✅ Utiliser FedaPay.init (compatible avec checkout.js)
+                const widget = FedaPay.init({
                     public_key: FEDAPAY_PUBLIC_KEY,
-                    currency: 'XOF',
-                    amount: Math.round(price * 100), // Centimes
-                    description: `Achat de contenu : ${title}`,
+                    transaction: {
+                        amount: Math.round(price),
+                        description: `Achat de contenu : ${title}`
+                    },
                     customer: {
                         email: 'client@exemple.com',
-                        name: 'Client'
+                        firstname: 'Client',
+                        lastname: ''
                     },
-                    onSuccess: function(response) {
-                        console.log('✅ Paiement réussi:', response);
-                        // Ouvrir le contenu après paiement
-                        showPurchaseModal(url, title);
-                    },
-                    onError: function(error) {
-                        console.error('❌ Erreur FedaPay:', error);
-                        alert('❌ Erreur de paiement: ' + (error.message || 'Veuillez réessayer.'));
-                    },
-                    onClose: function() {
-                        console.log('👆 Fenêtre de paiement fermée');
+                    onComplete: function(response) {
+                        if (response.reason === FedaPay.CHECKOUT_COMPLETED) {
+                            console.log('✅ Paiement réussi:', response.transaction);
+                            showPurchaseModal(url, title);
+                        } else if (response.reason === FedaPay.DIALOG_DISMISSED) {
+                            console.log('👆 Fenêtre de paiement fermée');
+                        }
                     }
                 });
-                fedapay.open();
+                widget.open();
 
             } catch (error) {
                 console.error('❌ Erreur:', error);
@@ -233,7 +237,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof FedaPay === 'undefined') {
                 console.warn('⚠️ FedaPay non chargé, tentative de rechargement...');
-                // Le fallback devrait déjà être actif
             } else {
                 console.log('✅ FedaPay chargé avec succès');
             }
