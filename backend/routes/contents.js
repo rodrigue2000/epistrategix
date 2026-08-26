@@ -81,75 +81,95 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
 // 4. ACHETER UN CONTENU PAYANT (via FedaPay)
 // ============================================================
 router.post('/purchase', async (req, res) => {
-  const { contentId, customerName, customerEmail } = req.body;
-  
-  if (!contentId) {
-    return res.status(400).json({ error: 'ID du contenu requis' });
-  }
-
-  try {
-    // 1. Récupérer le contenu
-    const doc = await db.collection('contents').doc(contentId).get();
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Contenu non trouvé' });
-    }
+    console.log('📦 Achat contenu - requête reçue:', req.body);
     
-    const content = doc.data();
+    const { contentId, customerName, customerEmail } = req.body;
     
-    // 2. Vérifier que le contenu est payant
-    if (content.priceType !== 'paid' || !content.price || content.price <= 0) {
-      return res.status(400).json({ 
-        error: 'Ce contenu est gratuit ou n\'a pas de prix défini' 
-      });
+    if (!contentId) {
+        return res.status(400).json({ error: 'ID du contenu requis' });
     }
 
-    // 3. Créer la transaction FedaPay
-    const amount = content.price;
-    const response = await fedapay.post('/v1/transactions', {
-      amount: Math.round(amount),
-      currency: { iso: 'XOF' },
-      description: `Achat de contenu : ${content.title}`,
-      customer: {
-        email: customerEmail || 'client@exemple.com',
-        name: customerName || 'Client',
-      },
-      callback_url: `${process.env.BASE_URL}/api/contents/callback`,
-      metadata: {
-        contentId: contentId,
-        contentType: 'content_purchase',
-        contentTitle: content.title,
-        contentPrice: amount
-      },
-    });
+    try {
+        // 1. Récupérer le contenu
+        const doc = await db.collection('contents').doc(contentId).get();
+        if (!doc.exists) {
+            return res.status(404).json({ error: 'Contenu non trouvé' });
+        }
+        
+        const content = doc.data();
+        console.log('✅ Contenu trouvé:', content.title, 'Prix:', content.price);
+        
+        if (content.priceType !== 'paid' || !content.price || content.price <= 0) {
+            return res.status(400).json({ 
+                error: 'Ce contenu est gratuit ou n\'a pas de prix défini' 
+            });
+        }
 
-    const transaction = response.data;
-    
-    // 4. Enregistrer la transaction
-    await db.collection('transactions').doc(transaction.id).set({
-      contentId: contentId,
-      contentTitle: content.title,
-      amount: amount,
-      status: transaction.status,
-      fedapayTransaction: transaction,
-      createdAt: new Date().toISOString(),
-    });
+        // 2. Créer la transaction FedaPay
+        const amount = content.price;
+        console.log('💰 Création transaction FedaPay:', amount, { iso: 'XOF' });
+        
+        const response = await fedapay.post('/v1/transactions', {
+            amount: Math.round(amount),
+            currency: { iso: 'XOF' },
+            description: `Achat de contenu : ${content.title}`,
+            customer: {
+                email: customerEmail || 'client@exemple.com',
+                name: customerName || 'Client',
+            },
+            callback_url: `${process.env.BASE_URL}/api/contents/callback`,
+            metadata: {
+                contentId: contentId,
+                contentType: 'content_purchase',
+                contentTitle: content.title,
+                contentPrice: amount
+            },
+        });
 
-    // 5. Retourner l'URL de paiement
-    res.json({
-      success: true,
-      transactionId: transaction.id,
-      url: transaction.url,
-      contentTitle: content.title,
-      contentUrl: content.url
-    });
-    
-  } catch (error) {
-    console.error('❌ Erreur achat contenu:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: 'Erreur lors de l\'achat du contenu',
-      details: error.response?.data?.message || error.message
-    });
-  }
+        // ⚠️ VÉRIFIER LA RÉPONSE
+        const transaction = response.data;
+        console.log('📦 Réponse FedaPay:', JSON.stringify(transaction, null, 2));
+        
+        if (!transaction || !transaction.id) {
+            console.error('❌ Transaction ID manquant!');
+            return res.status(500).json({ 
+                error: 'Erreur FedaPay: ID de transaction manquant',
+                details: transaction
+            });
+        }
+
+        // 3. Enregistrer la transaction
+        await db.collection('transactions').doc(transaction.id).set({
+            contentId: contentId,
+            contentTitle: content.title,
+            amount: amount,
+            status: transaction.status || 'pending',
+            fedapayTransaction: transaction,
+            createdAt: new Date().toISOString(),
+        });
+
+        console.log('✅ Transaction enregistrée:', transaction.id);
+
+        // 4. Retourner l'URL de paiement
+        res.json({
+            success: true,
+            transactionId: transaction.id,
+            url: transaction.url,
+            contentTitle: content.title,
+            contentUrl: content.url
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur achat contenu:');
+        console.error('  - Message:', error.message);
+        console.error('  - Status:', error.response?.status);
+        console.error('  - Data:', JSON.stringify(error.response?.data || {}, null, 2));
+        
+        res.status(500).json({ 
+            error: 'Erreur lors de l\'achat du contenu',
+            details: error.response?.data?.message || error.message
+        });
+    }
 });
 
 // ============================================================
