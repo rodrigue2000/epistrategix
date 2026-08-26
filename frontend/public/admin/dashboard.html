@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Admin</title>
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
@@ -21,8 +22,10 @@
             </nav>
         </div>
     </header>
+
     <main>
         <div class="container">
+            <!-- ===== KPI ===== -->
             <h2>Indicateurs clés</h2>
             <div id="kpiContainer" class="kpi-grid">
                 <div class="kpi-card"><span>Total services</span><span id="kpiServices">0</span></div>
@@ -30,15 +33,70 @@
                 <div class="kpi-card"><span>Transactions</span><span id="kpiTransactions">0</span></div>
                 <div class="kpi-card"><span>Réservations en attente</span><span id="kpiPending">0</span></div>
             </div>
-            <h3>Liste des réservations</h3>
+
+            <!-- ===== FILTRES ===== -->
+            <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                <h3 style="margin:0;">Liste des réservations</h3>
+                <div style="display:flex; gap:0.5rem;">
+                    <button id="filterPaid" class="btn btn-sm btn-primary" style="background:#1f9a6e;">Payées</button>
+                    <button id="filterAll" class="btn btn-sm btn-outline">Toutes</button>
+                </div>
+                <span id="filterStatus" style="font-size:0.8rem; color:#4d6f94;">Affichage : Payées uniquement</span>
+            </div>
+
+            <!-- ===== TABLEAU DES RÉSERVATIONS ===== -->
             <div style="overflow-x:auto;">
                 <table id="reservationsTable">
-                    <thead><tr><th>Client</th><th>Téléphone</th><th>Service</th><th>Date</th><th>Heure</th><th>Statut</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Téléphone</th>
+                            <th>Service</th>
+                            <th>Date</th>
+                            <th>Heure</th>
+                            <th>Durée</th>
+                            <th>Montant</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody></tbody>
                 </table>
             </div>
         </div>
     </main>
+
+    <!-- ============================================================ -->
+    <!-- MODALE WHATSAPP -->
+    <!-- ============================================================ -->
+    <div id="whatsappModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="color:#0a2647; margin-bottom:0.5rem;">
+                <i class="fab fa-whatsapp" style="color:#25D366;"></i> Notification WhatsApp
+            </h3>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Message pré-rempli à envoyer au client.
+            </p>
+
+            <div style="background:#f8faff; border-radius:1rem; padding:1rem; border:1px solid #e2ebf6; margin-bottom:1rem;">
+                <label style="font-weight:600; font-size:0.8rem; color:#1a3f68;">📱 Numéro du client</label>
+                <p id="whatsappPhone" style="font-size:1.1rem; font-weight:500; color:#0a2647; margin:0.2rem 0 0.5rem 0;"></p>
+                
+                <label style="font-weight:600; font-size:0.8rem; color:#1a3f68;">💬 Message</label>
+                <textarea id="whatsappMessage" rows="6" style="width:100%; padding:0.8rem; border-radius:12px; border:1px solid #dce7f5; font-family:inherit; font-size:0.9rem; background:white; resize:vertical;" readonly></textarea>
+            </div>
+
+            <div style="display:flex; gap:0.8rem; flex-wrap:wrap;">
+                <a id="whatsappLink" target="_blank" class="btn btn-success" style="flex:1; justify-content:center; padding:0.8rem; min-width:150px;">
+                    <i class="fab fa-whatsapp"></i> Ouvrir WhatsApp
+                </a>
+                <button id="closeWhatsappModal" class="btn btn-outline" style="flex:1; justify-content:center; min-width:100px;">
+                    <i class="fas fa-times"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="../js/admin.js"></script>
 </body>
 </html>

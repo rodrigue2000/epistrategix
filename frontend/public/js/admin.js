@@ -1,6 +1,12 @@
- // ===== admin.js - Script partagé pour toutes les pages admin =====
+ // ================================================================
+// admin.js - Script partagé pour toutes les pages admin
+// ================================================================
+
 const API_URL = 'https://epistrategix-backend.onrender.com';
 
+// ================================================================
+// CONFIGURATION FIREBASE
+// ================================================================
 const firebaseConfig = {
     apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
     authDomain: "epistrategix.firebaseapp.com",
@@ -18,12 +24,38 @@ if (!firebase.apps.length) {
     console.log('✅ Firebase déjà initialisé');
 }
 
-// ✅ Persistance de session (reste connecté entre les pages)
+// ✅ Persistance de session
 firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .then(() => console.log('✅ Persistance activée'))
     .catch(err => console.error('❌ Erreur persistance:', err));
 
-// ===== VÉRIFICATION DE L'AUTHENTIFICATION =====
+// ================================================================
+// VARIABLES GLOBALES
+// ================================================================
+let servicesMap = {}; // Cache ID → Nom du service
+let currentFilter = 'paid'; // 'paid' ou 'all'
+
+// ================================================================
+// CHARGER LA MAP DES SERVICES (ID → NOM)
+// ================================================================
+async function loadServicesMap() {
+    try {
+        const response = await fetch(`${API_URL}/api/services`);
+        if (!response.ok) throw new Error('Erreur chargement services');
+        const services = await response.json();
+        servicesMap = {};
+        services.forEach(s => { servicesMap[s.id] = s.name; });
+        console.log(`✅ ${Object.keys(servicesMap).length} services chargés`);
+        return servicesMap;
+    } catch (error) {
+        console.error('❌ Erreur chargement services:', error);
+        return {};
+    }
+}
+
+// ================================================================
+// VÉRIFICATION DE L'AUTHENTIFICATION
+// ================================================================
 firebase.auth().onAuthStateChanged(async user => {
     console.log('🔍 Auth state changed:', user ? '✅ Connecté' : '❌ Déconnecté');
     
@@ -51,48 +83,256 @@ firebase.auth().onAuthStateChanged(async user => {
         }
         
         console.log('✅ Admin vérifié');
-        
-        // ===== SI ON EST SUR DASHBOARD.HTML =====
+
+        // Charger la map des services
+        await loadServicesMap();
+
+        // ================================================================
+        // PAGE DASHBOARD
+        // ================================================================
         if (window.location.pathname.includes('dashboard.html')) {
             const kpi = await response.json();
             
-            // Mettre à jour les KPI
             document.getElementById('kpiServices').textContent = kpi.totalServices || 0;
             document.getElementById('kpiRevenue').textContent = (kpi.totalRevenue || 0) + ' FCFA';
             document.getElementById('kpiTransactions').textContent = kpi.totalTransactions || 0;
             document.getElementById('kpiPending').textContent = kpi.reservations?.pending || 0;
 
-            // Charger les réservations
-            const resResponse = await fetch(`${API_URL}/api/admin/reservations/export`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const reservations = await resResponse.json();
-            const tbody = document.querySelector('#reservationsTable tbody');
-            if (tbody) {
-                tbody.innerHTML = '';
-                reservations.forEach(r => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${r.clientName || 'N/A'}</td>
-                        <td>${r.clientPhone || 'N/A'}</td>
-                        <td>${r.serviceId || 'N/A'}</td>
-                        <td>${r.date || 'N/A'}</td>
-                        <td>${r.time || 'N/A'}</td>
-                        <td>${r.status || 'pending'}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            }
-            console.log('✅ Dashboard chargé');
+            // Charger les réservations avec filtrage
+            await loadReservations(token, currentFilter);
+            setupFilterButtons(token);
+            setupWhatsAppModal();
         }
+        
     } catch (error) {
         console.error('❌ Erreur:', error);
         alert('Erreur de chargement des données: ' + error.message);
     }
 });
 
-// ===== DÉCONNEXION =====
+// ================================================================
+// CHARGER LES RÉSERVATIONS (avec filtrage)
+// ================================================================
+async function loadReservations(token, filter = 'paid') {
+    try {
+        const url = filter === 'all' 
+            ? `${API_URL}/api/admin/reservations/export?filter=all`
+            : `${API_URL}/api/admin/reservations/export`;
+            
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Erreur chargement réservations');
+        const reservations = await response.json();
+        
+        const tbody = document.querySelector('#reservationsTable tbody');
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        
+        if (reservations.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:#4d6f94; padding:2rem;">
+                Aucune réservation ${filter === 'paid' ? 'payée' : ''} trouvée.
+            </td></tr>`;
+            return;
+        }
+
+        reservations.forEach(r => {
+            const tr = document.createElement('tr');
+            const serviceName = servicesMap[r.serviceId] || r.serviceId || 'Service inconnu';
+            
+            // Statut avec couleur
+            const statusColors = {
+                pending: { bg: '#fff3cd', color: '#856404', label: 'En attente' },
+                paid: { bg: '#d4edda', color: '#155724', label: 'Payée' },
+                confirmed: { bg: '#cce5ff', color: '#004085', label: 'Confirmée' },
+                cancelled: { bg: '#f8d7da', color: '#721c24', label: 'Annulée' }
+            };
+            const statusInfo = statusColors[r.status] || statusColors.pending;
+            
+            const durationDisplay = r.durationMinutes ? `${r.durationMinutes} min` : '-';
+            const amountDisplay = r.amount ? `${r.amount} FCFA` : '-';
+            
+            tr.innerHTML = `
+                <td>${r.clientName || 'N/A'}</td>
+                <td>${r.clientPhone || 'N/A'}</td>
+                <td><strong>${serviceName}</strong></td>
+                <td>${r.date || 'N/A'}</td>
+                <td>${r.time || 'N/A'}</td>
+                <td>${durationDisplay}</td>
+                <td>${amountDisplay}</td>
+                <td>
+                    <span style="padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${statusInfo.bg}; color:${statusInfo.color};">
+                        ${statusInfo.label}
+                    </span>
+                </td>
+                <td>
+                    ${r.status === 'pending' || r.status === 'paid' ? `
+                        <button onclick="handleReservationAction('${r.id}', 'confirmed')" class="btn btn-success btn-sm" style="margin-right:4px;">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button onclick="handleReservationAction('${r.id}', 'cancelled')" class="btn btn-danger btn-sm">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    ` : `
+                        <span style="font-size:0.7rem; color:#4d6f94;">${r.status === 'confirmed' ? '✅ Confirmé' : '❌ Annulé'}</span>
+                    `}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+        // Mettre à jour l'indicateur de filtre
+        const filterStatus = document.getElementById('filterStatus');
+        if (filterStatus) {
+            filterStatus.textContent = `Affichage : ${filter === 'paid' ? 'Payées uniquement' : 'Toutes'}`;
+        }
+        
+        console.log(`✅ ${reservations.length} réservations chargées (filtre: ${filter})`);
+    } catch (error) {
+        console.error('❌ Erreur chargement réservations:', error);
+    }
+}
+
+// ================================================================
+// CONFIGURER LES BOUTONS DE FILTRE
+// ================================================================
+function setupFilterButtons(token) {
+    const btnPaid = document.getElementById('filterPaid');
+    const btnAll = document.getElementById('filterAll');
+    
+    if (btnPaid) {
+        btnPaid.addEventListener('click', () => {
+            currentFilter = 'paid';
+            loadReservations(token, 'paid');
+            btnPaid.className = 'btn btn-sm btn-primary';
+            btnPaid.style.background = '#1f9a6e';
+            btnAll.className = 'btn btn-sm btn-outline';
+        });
+    }
+    
+    if (btnAll) {
+        btnAll.addEventListener('click', () => {
+            currentFilter = 'all';
+            loadReservations(token, 'all');
+            btnAll.className = 'btn btn-sm btn-primary';
+            btnAll.style.background = '#1e5fb0';
+            btnPaid.className = 'btn btn-sm btn-outline';
+            btnPaid.style.background = '';
+        });
+    }
+}
+
+// ================================================================
+// GÉRER UNE ACTION SUR UNE RÉSERVATION (confirmer/annuler)
+// ================================================================
+window.handleReservationAction = async function(id, status) {
+    const user = firebase.auth().currentUser;
+    if (!user) return;
+
+    const actionText = status === 'confirmed' ? 'confirmer' : 'annuler';
+    if (!confirm(`Voulez-vous ${actionText} cette réservation ?`)) return;
+
+    try {
+        const token = await user.getIdToken();
+        
+        // Mettre à jour le statut
+        const response = await fetch(`${API_URL}/api/admin/reservations/${id}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ status })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erreur lors de la mise à jour');
+        }
+
+        const data = await response.json();
+        console.log('✅ Statut mis à jour:', data);
+        
+        // OUVRIRE LA MODALE WHATSAPP
+        await openWhatsAppModal(id, status, token);
+        
+        // Recharger les réservations
+        await loadReservations(token, currentFilter);
+        alert(`✅ Réservation ${status === 'confirmed' ? 'confirmée' : 'annulée'} avec succès !`);
+
+    } catch (error) {
+        console.error('❌ Erreur:', error);
+        alert('❌ Erreur: ' + error.message);
+    }
+};
+
+// ================================================================
+// OUVRIR LA MODALE WHATSAPP
+// ================================================================
+async function openWhatsAppModal(reservationId, status, token) {
+    try {
+        const response = await fetch(`${API_URL}/api/admin/whatsapp-link/${reservationId}/${status}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            console.warn('Erreur génération lien WhatsApp:', data.error);
+            return;
+        }
+        
+        // Remplir la modale
+        const modal = document.getElementById('whatsappModal');
+        const phoneEl = document.getElementById('whatsappPhone');
+        const messageEl = document.getElementById('whatsappMessage');
+        const linkEl = document.getElementById('whatsappLink');
+        
+        if (modal && phoneEl && messageEl && linkEl) {
+            phoneEl.textContent = data.phone || 'Numéro non disponible';
+            messageEl.textContent = data.message || '';
+            linkEl.href = data.whatsappLink || '#';
+            
+            // Afficher la modale
+            modal.style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Erreur WhatsApp:', error);
+    }
+}
+
+// ================================================================
+// CONFIGURER LA MODALE WHATSAPP
+// ================================================================
+function setupWhatsAppModal() {
+    const modal = document.getElementById('whatsappModal');
+    const closeBtn = document.getElementById('closeWhatsappModal');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+    }
+    
+    // Fermer en cliquant à l'extérieur
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+}
+
+// ================================================================
+// DÉCONNEXION
+// ================================================================
 document.getElementById('logoutBtn')?.addEventListener('click', () => {
-    firebase.auth().signOut();
-    window.location.href = 'login.html';
+    if (confirm('Voulez-vous vous déconnecter ?')) {
+        firebase.auth().signOut();
+        window.location.href = 'login.html';
+    }
 });
+
+console.log('✅ admin.js chargé avec succès');

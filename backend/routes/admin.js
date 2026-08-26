@@ -1,10 +1,13 @@
-const express = require('express');
+ const express = require('express');
 const { db } = require('../config/firebase');
 const verifyToken = require('../middleware/auth');
 const isAdmin = require('../middleware/admin');
 
 const router = express.Router();
 
+// ============================================================
+// 1. KPI - Indicateurs clés
+// ============================================================
 router.get('/kpi', verifyToken, isAdmin, async (req, res) => {
   try {
     const servicesSnap = await db.collection('services').get();
@@ -42,11 +45,21 @@ router.get('/kpi', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// ============================================================
+// 2. EXPORT DES RÉSERVATIONS (avec filtrage des pending)
+// ============================================================
 router.get('/reservations/export', verifyToken, isAdmin, async (req, res) => {
   try {
-    const snapshot = await db.collection('reservations')
-      .orderBy('createdAt', 'desc')
-      .get();
+    const { filter } = req.query; // 'all' ou 'paid' (par défaut: 'paid')
+    
+    let query = db.collection('reservations').orderBy('createdAt', 'desc');
+    
+    // ✅ Par défaut, on ne montre que les réservations payées
+    if (filter !== 'all') {
+      query = query.where('status', '==', 'paid');
+    }
+    
+    const snapshot = await query.get();
     const reservations = [];
     snapshot.forEach(doc => reservations.push({ id: doc.id, ...doc.data() }));
     res.json(reservations);
@@ -55,20 +68,112 @@ router.get('/reservations/export', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// ============================================================
+// 3. RÉCUPÉRER UNE RÉSERVATION PAR ID
+// ============================================================
+router.get('/reservations/:id', verifyToken, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const doc = await db.collection('reservations').doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Réservation non trouvée' });
+    }
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// ===== BLOCAGE MANUEL D'UN CRÉNEAU =====
-router.post('/block', verifyToken, isAdmin, async (req, res) => {
-  const { date, time, reason } = req.body;
+// ============================================================
+// 4. METTRE À JOUR LE STATUT D'UNE RÉSERVATION + LIEN WHATSAPP
+// ============================================================
+router.put('/reservations/:id/status', verifyToken, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // 'confirmed' ou 'cancelled'
   
-  if (!date || !time) {
-    return res.status(400).json({ error: 'Date et heure requises' });
+  if (!['confirmed', 'cancelled'].includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide. Utilisez "confirmed" ou "cancelled"' });
+  }
+  
+  try {
+    // 1. Récupérer la réservation
+    const doc = await db.collection('reservations').doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Réservation non trouvée' });
+    }
+    const reservation = doc.data();
+    
+    // 2. Récupérer le nom du service
+    const serviceDoc = await db.collection('services').doc(reservation.serviceId).get();
+    const serviceName = serviceDoc.exists ? serviceDoc.data().name : 'Service';
+    
+    // 3. Mettre à jour le statut
+    await db.collection('reservations').doc(id).update({
+      status: status,
+      updatedAt: new Date().toISOString()
+    });
+    
+    // 4. Générer le message WhatsApp
+    const statusText = status === 'confirmed' ? 'confirmée ✅' : 'annulée ❌';
+    const message = `
+${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusText} !
+
+📋 Service : ${serviceName}
+📅 Date : ${reservation.date}
+⏰ Heure : ${reservation.time}
+👤 Client : ${reservation.clientName}
+
+${status === 'confirmed' ? 'Merci pour votre confiance ! 🙏' : 'Nous sommes désolés pour ce contretemps.'}
+
+Pour toute question, contactez-nous au +225 XX XX XX XX.
+    `.trim();
+    
+    // Nettoyer le numéro
+    const phone = (reservation.clientPhone || '').replace(/[\s\-\(\)]/g, '');
+    const whatsappLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+    
+    res.json({
+      success: true,
+      message: `Réservation ${status}`,
+      reservation: { id, ...reservation, status },
+      whatsapp: {
+        link: whatsappLink,
+        message: message,
+        phone: phone
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erreur mise à jour statut:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 5. BLOCAGE MANUEL D'UN CRÉNEAU (PLAGE HORAIRE)
+// ============================================================
+router.post('/block', verifyToken, isAdmin, async (req, res) => {
+  const { date, startTime, endTime, reason } = req.body;
+  
+  if (!date || !startTime || !endTime) {
+    return res.status(400).json({ 
+      error: 'Date, heure de début et heure de fin requises' 
+    });
+  }
+  
+  // Vérifier que startTime < endTime
+  if (startTime >= endTime) {
+    return res.status(400).json({ 
+      error: 'L\'heure de début doit être avant l\'heure de fin' 
+    });
   }
   
   try {
     const block = {
       date,
-      time,
-      reason: reason || 'Blocage manuel',
+      startTime,
+      endTime,
+      reason: reason || 'Blocage administratif',
       createdAt: new Date().toISOString(),
       createdBy: req.user.uid,
     };
@@ -80,4 +185,92 @@ router.post('/block', verifyToken, isAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ============================================================
+// 6. LISTER TOUS LES BLOCAGES
+// ============================================================
+router.get('/blocks', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const snapshot = await db.collection('blocks')
+      .orderBy('date', 'asc')
+      .get();
+    const blocks = [];
+    snapshot.forEach(doc => blocks.push({ id: doc.id, ...doc.data() }));
+    res.json(blocks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 7. SUPPRIMER UN BLOCAGE
+// ============================================================
+router.delete('/block/:id', verifyToken, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const doc = await db.collection('blocks').doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Blocage non trouvé' });
+    }
+    await db.collection('blocks').doc(id).delete();
+    res.json({ message: 'Blocage supprimé' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 8. GÉNÉRER UN LIEN WHATSAPP POUR UNE RÉSERVATION
+// ============================================================
+router.get('/whatsapp-link/:reservationId/:status', verifyToken, isAdmin, async (req, res) => {
+  const { reservationId, status } = req.params;
+  
+  if (!['confirmed', 'cancelled'].includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide' });
+  }
+  
+  try {
+    // Récupérer la réservation
+    const doc = await db.collection('reservations').doc(reservationId).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Réservation non trouvée' });
+    }
+    const reservation = doc.data();
+    
+    // Récupérer le service
+    const serviceDoc = await db.collection('services').doc(reservation.serviceId).get();
+    const serviceName = serviceDoc.exists ? serviceDoc.data().name : 'Service';
+    
+    // Générer le message
+    const statusText = status === 'confirmed' ? 'confirmée ✅' : 'annulée ❌';
+    const message = `
+${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusText} !
+
+📋 Service : ${serviceName}
+📅 Date : ${reservation.date}
+⏰ Heure : ${reservation.time}
+👤 Client : ${reservation.clientName}
+
+${status === 'confirmed' ? 'Merci pour votre confiance ! 🙏' : 'Nous sommes désolés pour ce contretemps.'}
+    `.trim();
+    
+    // Nettoyer le numéro
+    const phone = (reservation.clientPhone || '').replace(/[\s\-\(\)]/g, '');
+    const whatsappLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+    
+    res.json({
+      success: true,
+      whatsappLink: whatsappLink,
+      message: message,
+      phone: phone,
+      reservation: reservation,
+      serviceName: serviceName
+    });
+    
+  } catch (error) {
+    console.error('Erreur génération lien WhatsApp:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

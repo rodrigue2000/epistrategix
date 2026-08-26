@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendrier - Admin</title>
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
@@ -26,48 +27,82 @@
         <div class="container">
             <h2>Disponibilités et réservations</h2>
             
+            <!-- ============================================================ -->
+            <!-- SECTION BLOCAGE MANUEL (PLAGE HORAIRE) -->
+            <!-- ============================================================ -->
             <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
-                <h3>Blocage manuel d'un créneau</h3>
+                <h3>🔒 Blocage manuel d'une plage horaire</h3>
                 <form id="blockForm" style="max-width:100%; padding:1rem 0;">
                     <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
                         <div class="form-group" style="flex:1; min-width:150px;">
-                            <label>Date</label>
+                            <label>📅 Date</label>
                             <input type="date" id="blockDate" required>
                         </div>
-                        <div class="form-group" style="flex:1; min-width:150px;">
-                            <label>Heure</label>
-                            <input type="time" id="blockTime" required>
+                        <div class="form-group" style="flex:1; min-width:130px;">
+                            <label>⏰ Début</label>
+                            <input type="time" id="blockStartTime" required step="900">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:130px;">
+                            <label>⏰ Fin</label>
+                            <input type="time" id="blockEndTime" required step="900">
                         </div>
                         <div class="form-group" style="flex:1; min-width:150px;">
-                            <label>Motif</label>
+                            <label>📝 Motif</label>
                             <input type="text" id="blockReason" placeholder="Raison du blocage">
                         </div>
                         <button type="submit" class="btn btn-danger">
-                            <i class="fas fa-ban"></i> Bloquer
+                            <i class="fas fa-ban"></i> Bloquer la plage
                         </button>
                     </div>
+                    <div id="blockError" style="color:#c73b3b; font-size:0.9rem; margin-top:0.5rem; display:none;"></div>
                 </form>
             </div>
 
-            <h3>Réservations à venir</h3>
+            <!-- ============================================================ -->
+            <!-- SECTION LISTE DES BLOCAGES -->
+            <!-- ============================================================ -->
+            <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
+                <h3>📋 Plages horaires bloquées</h3>
+                <div id="blocksList">
+                    <p style="color:#4d6f94;">Chargement des blocages...</p>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- SECTION LISTE DES RÉSERVATIONS -->
+            <!-- ============================================================ -->
+            <h3>📋 Réservations à venir</h3>
             <div id="reservationsList"></div>
         </div>
     </main>
 
     <script src="../js/admin.js"></script>
     <script>
-        // ===== CODE SPÉCIFIQUE CALENDRIER =====
-         
+        // ================================================================
+        // CODE SPÉCIFIQUE CALENDRIER
+        // ================================================================
 
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+
+        // ================================================================
+        // AUTHENTIFICATION
+        // ================================================================
         firebase.auth().onAuthStateChanged(async (user) => {
-            if (!user) return;
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
             const token = await user.getIdToken();
             loadReservations(token);
+            loadBlocks(token);
         });
 
+        // ================================================================
+        // CHARGER LES RÉSERVATIONS
+        // ================================================================
         async function loadReservations(token) {
             try {
-                const response = await fetch(`${API_URL}/api/admin/reservations/export`, {
+                const response = await fetch(`${API_URL}/api/admin/reservations/export?filter=all`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const reservations = await response.json();
@@ -85,33 +120,45 @@
                             <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
                                 ${r.date} à ${r.time}
                             </span>
-                            <span style="margin-left:1rem; padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${r.status === 'paid' ? '#d4edda' : r.status === 'pending' ? '#fff3cd' : '#f8d7da'}; color:${r.status === 'paid' ? '#155724' : r.status === 'pending' ? '#856404' : '#721c24'};">
+                            ${r.durationMinutes ? `<span style="color:#4d6f94; font-size:0.9rem; margin-left:0.5rem;">(${r.durationMinutes} min)</span>` : ''}
+                            <span style="margin-left:1rem; padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${r.status === 'paid' ? '#d4edda' : r.status === 'pending' ? '#fff3cd' : r.status === 'confirmed' ? '#cce5ff' : '#f8d7da'}; color:${r.status === 'paid' ? '#155724' : r.status === 'pending' ? '#856404' : r.status === 'confirmed' ? '#004085' : '#721c24'};">
                                 ${r.status}
                             </span>
+                            ${r.amount ? `<span style="margin-left:0.5rem; font-weight:600; color:#1e5fb0;">${r.amount} FCFA</span>` : ''}
                         </div>
-                        <div>
-                            <button onclick="updateStatus('${r.id}', 'confirmed')" class="btn btn-success btn-sm">
-                                Confirmer
-                            </button>
-                            <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-danger btn-sm">
-                                Annuler
-                            </button>
+                        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                            ${r.status !== 'confirmed' && r.status !== 'cancelled' ? `
+                                <button onclick="updateStatus('${r.id}', 'confirmed')" class="btn btn-success btn-sm">
+                                    <i class="fas fa-check"></i> Confirmer
+                                </button>
+                                <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-times"></i> Annuler
+                                </button>
+                            ` : `
+                                <span style="padding:0.3rem 0.8rem; border-radius:40px; font-size:0.75rem; background:#e9ecef; color:#6c757d;">
+                                    ${r.status === 'confirmed' ? '✅ Confirmé' : '❌ Annulé'}
+                                </span>
+                            `}
                         </div>
                     </div>
                 `).join('');
             } catch (error) {
-                console.error('Erreur:', error);
+                console.error('Erreur chargement réservations:', error);
             }
         }
 
-        // Mettre à jour le statut
+        // ================================================================
+        // METTRE À JOUR LE STATUT D'UNE RÉSERVATION
+        // ================================================================
         window.updateStatus = async function(id, status) {
             const user = firebase.auth().currentUser;
             if (!user) return;
 
             try {
                 const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/reservations/${id}/status`, {
+                
+                // Appeler la route PUT /reservations/:id/status
+                const response = await fetch(`${API_URL}/api/admin/reservations/${id}/status`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -125,27 +172,145 @@
                     throw new Error(error.error || 'Erreur lors de la mise à jour');
                 }
 
-                alert(`✅ Statut mis à jour : ${status}`);
+                const data = await response.json();
+                
+                // ✅ Si confirmation ou annulation, ouvrir WhatsApp
+                if (status === 'confirmed' || status === 'cancelled') {
+                    await openWhatsAppModal(id, status);
+                }
+                
+                // Recharger les réservations
                 loadReservations(token);
+
             } catch (error) {
-                alert('Erreur: ' + error.message);
+                alert('❌ Erreur: ' + error.message);
             }
         };
 
-        // Blocage manuel
+        // ================================================================
+        // OUVRIR LA MODALE WHATSAPP
+        // ================================================================
+        async function openWhatsAppModal(reservationId, status) {
+            try {
+                const user = firebase.auth().currentUser;
+                if (!user) return;
+                
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/admin/whatsapp-link/${reservationId}/${status}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    console.warn('Erreur génération lien WhatsApp:', data.error);
+                    return;
+                }
+                
+                if (data.whatsappLink) {
+                    // Ouvrir WhatsApp dans un nouvel onglet
+                    window.open(data.whatsappLink, '_blank');
+                } else {
+                    alert('⚠️ Numéro de téléphone non disponible pour ce client.');
+                }
+            } catch (error) {
+                console.error('Erreur WhatsApp:', error);
+            }
+        };
+
+        // ================================================================
+        // CHARGER LES BLOCAGES
+        // ================================================================
+        async function loadBlocks(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/blocks`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const blocks = await response.json();
+                const container = document.getElementById('blocksList');
+
+                if (blocks.length === 0) {
+                    container.innerHTML = '<p style="color:#4d6f94;">Aucune plage horaire bloquée.</p>';
+                    return;
+                }
+
+                container.innerHTML = blocks.map(b => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.6rem 1rem; background:#f8faff; border-radius:60px; margin-bottom:0.5rem; border:1px solid #e2ebf6; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <strong>${b.date}</strong>
+                            <span style="color:#c73b3b; margin-left:0.8rem;">
+                                <i class="fas fa-clock"></i> ${b.startTime || '??'} → ${b.endTime || '??'}
+                            </span>
+                            <span style="color:#4d6f94; font-size:0.85rem; margin-left:0.8rem;">
+                                📝 ${b.reason || 'Blocage'}
+                            </span>
+                        </div>
+                        <button onclick="deleteBlock('${b.id}')" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur chargement blocages:', error);
+                document.getElementById('blocksList').innerHTML = '<p style="color:#c73b3b;">Erreur de chargement des blocages.</p>';
+            }
+        }
+
+        // ================================================================
+        // SUPPRIMER UN BLOCAGE
+        // ================================================================
+        window.deleteBlock = async function(id) {
+            if (!confirm('Supprimer ce blocage ?')) return;
+            
+            try {
+                const user = firebase.auth().currentUser;
+                if (!user) return;
+                
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/admin/block/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la suppression');
+                }
+                
+                alert('✅ Blocage supprimé');
+                loadBlocks(token);
+            } catch (error) {
+                alert('❌ Erreur: ' + error.message);
+            }
+        };
+
+        // ================================================================
+        // BLOCAGE MANUEL (PLAGE HORAIRE)
+        // ================================================================
         document.getElementById('blockForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = firebase.auth().currentUser;
             if (!user) return;
 
             const date = document.getElementById('blockDate').value;
-            const time = document.getElementById('blockTime').value;
-            const reason = document.getElementById('blockReason').value || 'Blocage manuel';
+            const startTime = document.getElementById('blockStartTime').value;
+            const endTime = document.getElementById('blockEndTime').value;
+            const reason = document.getElementById('blockReason').value || 'Blocage administratif';
+            const errorDiv = document.getElementById('blockError');
 
-            if (!date || !time) {
-                alert('Veuillez sélectionner une date et une heure');
+            // Validation
+            if (!date || !startTime || !endTime) {
+                errorDiv.textContent = '⚠️ Veuillez remplir tous les champs.';
+                errorDiv.style.display = 'block';
                 return;
             }
+
+            if (startTime >= endTime) {
+                errorDiv.textContent = '⚠️ L\'heure de début doit être avant l\'heure de fin.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.style.display = 'none';
 
             try {
                 const token = await user.getIdToken();
@@ -155,7 +320,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ date, time, reason })
+                    body: JSON.stringify({ date, startTime, endTime, reason })
                 });
 
                 if (!response.ok) {
@@ -163,11 +328,12 @@
                     throw new Error(error.error || 'Erreur lors du blocage');
                 }
 
-                alert('✅ Créneau bloqué avec succès');
+                alert('✅ Plage horaire bloquée avec succès');
                 document.getElementById('blockForm').reset();
+                loadBlocks(token);
                 loadReservations(token);
             } catch (error) {
-                alert('Erreur: ' + error.message);
+                alert('❌ Erreur: ' + error.message);
             }
         });
     </script>

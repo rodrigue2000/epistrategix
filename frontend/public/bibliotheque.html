@@ -1,10 +1,18 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bibliothèque - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://js.fedapay.com/fedapay-v2.js"></script>
+    <script>
+        // Fallback si le CDN FedaPay est bloqué
+        if (typeof FedaPay === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/fedapay-js@2/dist/fedapay.min.js"><\/script>');
+        }
+    </script>
 </head>
 <body>
     <header>
@@ -14,42 +22,228 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
-                <a href="admin/dashboard.html" class="btn-admin">Admin</a>
+                <a href="admin/login.html" class="btn-admin">Admin</a>
             </nav>
         </div>
     </header>
 
     <main>
         <div class="container">
-            <h2>Bibliothèque de contenus</h2>
+            <h2>📚 Bibliothèque de contenus</h2>
+            <p style="color:#3e6188; margin-bottom:1.2rem;">
+                Téléchargez des ressources gratuites ou achetez des contenus premium.
+            </p>
             <div id="contentsList" class="grid">
                 <!-- Contenus chargés dynamiquement -->
             </div>
         </div>
     </main>
 
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 EpiStrategix - Tous droits réservés</p>
+        </div>
+    </footer>
+
+    <!-- ================================================================ -->
+    <!-- MODALE DE CONFIRMATION D'ACHAT -->
+    <!-- ================================================================ -->
+    <div id="purchaseModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <div style="font-size:4rem; color:#1f9a6e; margin-bottom:1rem;">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h3 style="color:#0a2647;">✅ Achat réussi !</h3>
+            <p style="color:#4d6f94; margin:0.5rem 0 1.5rem 0;">
+                Le téléchargement va commencer automatiquement.
+            </p>
+            <a id="downloadLink" href="#" target="_blank" class="btn btn-success" style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <i class="fas fa-download"></i> Télécharger maintenant
+            </a>
+            <button onclick="closePurchaseModal()" class="btn btn-outline" style="margin-top:1rem; display:block; width:100%; justify-content:center;">
+                <i class="fas fa-times"></i> Fermer
+            </button>
+        </div>
+    </div>
+
     <script>
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:5000' 
-            : 'https://epistrategix-backend.onrender.com';
-            
+        // ================================================================
+        // CONFIGURATION
+        // ================================================================
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+        const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is';
+
+        // ================================================================
+        // CHARGER LES CONTENUS
+        // ================================================================
         fetch(`${API_URL}/api/contents`)
             .then(res => res.json())
             .then(contents => {
                 const container = document.getElementById('contentsList');
+                container.innerHTML = '';
+                
+                if (contents.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column:1/-1;">
+                            <i class="fas fa-box-open"></i>
+                            <p>Aucun contenu disponible pour le moment.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
                 contents.forEach(content => {
                     const card = document.createElement('div');
                     card.className = 'content-card';
+                    
+                    const isFree = content.priceType === 'free';
+                    const priceDisplay = isFree ? '📄 Gratuit' : `💰 ${content.price || 0} FCFA`;
+                    const buttonText = isFree ? 'Télécharger' : 'Acheter';
+                    const buttonClass = isFree ? 'btn btn-secondary' : 'btn btn-success';
+                    
                     card.innerHTML = `
-                        <h3>${content.title}</h3>
-                        <p>${content.priceType === 'free' ? '📄 Gratuit' : '💰 ' + content.price + ' FCFA'}</p>
-                        <a href="${content.url}" target="_blank" class="btn btn-secondary">
-                            ${content.priceType === 'free' ? 'Télécharger' : 'Acheter'}
-                        </a>
+                        <h3>${escapeHtml(content.title)}</h3>
+                        <p style="color:#4d6f94; font-size:0.9rem;">${content.type || 'Fichier'}</p>
+                        <p style="font-size:1.2rem; font-weight:700; color:${isFree ? '#1f9a6e' : '#1e5fb0'};">
+                            ${priceDisplay}
+                        </p>
+                        <button class="${buttonClass}" onclick="handleContentAction('${content.id}', '${content.priceType}', ${content.price || 0}, '${content.url}', '${escapeHtml(content.title)}')" style="width:100%; justify-content:center;">
+                            ${isFree ? '<i class="fas fa-download"></i>' : '<i class="fas fa-shopping-cart"></i>'} ${buttonText}
+                        </button>
                     `;
                     container.appendChild(card);
                 });
+            })
+            .catch(err => {
+                console.error('Erreur chargement contenus:', err);
+                document.getElementById('contentsList').innerHTML = `
+                    <div class="empty-state" style="grid-column:1/-1;">
+                        <i class="fas fa-exclamation-triangle" style="color:#c73b3b;"></i>
+                        <p style="color:#c73b3b;">Erreur de chargement des contenus. Veuillez réessayer.</p>
+                    </div>
+                `;
             });
+
+        // ================================================================
+        // ÉCHAPPER LE HTML
+        // ================================================================
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // ================================================================
+        // GESTION DE L'ACTION SUR UN CONTENU
+        // ================================================================
+        async function handleContentAction(contentId, priceType, price, url, title) {
+            if (priceType === 'free') {
+                // ✅ Contenu gratuit → téléchargement direct
+                window.open(url, '_blank');
+                return;
+            }
+
+            // 🔒 Contenu payant → paiement FedaPay
+            try {
+                // 1. Créer la transaction sur le backend
+                const response = await fetch(`${API_URL}/api/contents/purchase`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contentId: contentId,
+                        customerName: 'Client',
+                        customerEmail: 'client@exemple.com'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
+                    return;
+                }
+
+                // 2. Ouvrir FedaPay
+                const fedapay = new FedaPay({
+                    public_key: FEDAPAY_PUBLIC_KEY,
+                    currency: 'XOF',
+                    amount: Math.round(price * 100), // Centimes
+                    description: `Achat de contenu : ${title}`,
+                    customer: {
+                        email: 'client@exemple.com',
+                        name: 'Client'
+                    },
+                    onSuccess: function(response) {
+                        console.log('✅ Paiement réussi:', response);
+                        // Ouvrir le contenu après paiement
+                        showPurchaseModal(url, title);
+                    },
+                    onError: function(error) {
+                        console.error('❌ Erreur FedaPay:', error);
+                        alert('❌ Erreur de paiement: ' + (error.message || 'Veuillez réessayer.'));
+                    },
+                    onClose: function() {
+                        console.log('👆 Fenêtre de paiement fermée');
+                    }
+                });
+                fedapay.open();
+
+            } catch (error) {
+                console.error('❌ Erreur:', error);
+                alert('❌ Erreur lors de l\'ouverture du paiement: ' + error.message);
+            }
+        }
+
+        // ================================================================
+        // AFFICHER LA MODALE DE CONFIRMATION D'ACHAT
+        // ================================================================
+        function showPurchaseModal(url, title) {
+            const modal = document.getElementById('purchaseModal');
+            const downloadLink = document.getElementById('downloadLink');
+            
+            if (modal && downloadLink) {
+                downloadLink.href = url;
+                downloadLink.textContent = `📥 Télécharger ${title || 'le contenu'}`;
+                modal.style.display = 'flex';
+                
+                // Ouvrir automatiquement le téléchargement après 1s
+                setTimeout(() => {
+                    window.open(url, '_blank');
+                }, 1000);
+            }
+        }
+
+        // ================================================================
+        // FERMER LA MODALE
+        // ================================================================
+        function closePurchaseModal() {
+            document.getElementById('purchaseModal').style.display = 'none';
+        }
+
+        // Fermer la modale en cliquant à l'extérieur
+        document.getElementById('purchaseModal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePurchaseModal();
+            }
+        });
+
+        // ================================================================
+        // VÉRIFIER QUE FEDAPAY EST CHARGÉ
+        // ================================================================
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof FedaPay === 'undefined') {
+                console.warn('⚠️ FedaPay non chargé, tentative de rechargement...');
+                // Le fallback devrait déjà être actif
+            } else {
+                console.log('✅ FedaPay chargé avec succès');
+            }
+        });
     </script>
 </body>
 </html>
