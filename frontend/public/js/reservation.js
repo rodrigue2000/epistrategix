@@ -66,7 +66,6 @@ function updateDurationAndPrice(service) {
     if (!service || !durationContainer) return;
     
     if (service.priceType === 'unit') {
-        // Tarification à l'unité de temps
         durationContainer.style.display = 'block';
         
         const unitDuration = service.durationUnit || 60;
@@ -74,35 +73,28 @@ function updateDurationAndPrice(service) {
         const minUnits = service.minDuration || 1;
         const maxUnits = service.maxDuration || 10;
         
-        // Configurer les limites
         durationUnitsInput.min = minUnits;
         durationUnitsInput.max = maxUnits;
         durationUnitsInput.value = minUnits;
         durationUnitsInput.step = 1;
         
-        // Afficher l'unité
         document.getElementById('durationUnitLabel').textContent = 
             `(${unitDuration} min/unité)`;
         document.getElementById('minDurationDisplay').textContent = minUnits;
         document.getElementById('maxDurationDisplay').textContent = maxUnits;
         
-        // Calculer le prix initial
         durationUnits = minUnits;
         const totalPrice = unitPrice * durationUnits;
         pricePreview.textContent = `💰 ${totalPrice} FCFA`;
-        
-        // Mettre à jour le champ caché
         document.getElementById('totalAmount').value = totalPrice;
         
     } else if (service.priceType === 'fixed') {
-        // Prix fixe
         durationContainer.style.display = 'none';
         pricePreview.textContent = `💰 ${service.price || 0} FCFA`;
         document.getElementById('totalAmount').value = service.price || 0;
         durationUnits = 1;
         
     } else {
-        // Prix libre (gratuit)
         durationContainer.style.display = 'none';
         pricePreview.textContent = `💰 Gratuit`;
         document.getElementById('totalAmount').value = 0;
@@ -124,7 +116,6 @@ document.getElementById('durationUnits')?.addEventListener('input', function() {
     const minUnits = selectedService.minDuration || 1;
     const maxUnits = selectedService.maxDuration || 10;
     
-    // Valider les limites
     if (units < minUnits) {
         this.value = minUnits;
         durationUnits = minUnits;
@@ -183,7 +174,6 @@ document.getElementById('reservationForm').addEventListener('submit', async func
     const durationUnits = parseInt(document.getElementById('durationUnits')?.value) || 1;
     const totalAmount = parseFloat(document.getElementById('totalAmount')?.value) || 0;
 
-    // Validation
     if (!serviceId) {
         alert('Veuillez sélectionner un service');
         return;
@@ -193,7 +183,6 @@ document.getElementById('reservationForm').addEventListener('submit', async func
         return;
     }
 
-    // Vérifier que le service est chargé
     if (!selectedService || selectedService.id !== serviceId) {
         try {
             const res = await fetch(`${API_URL}/api/services/${serviceId}`);
@@ -204,7 +193,6 @@ document.getElementById('reservationForm').addEventListener('submit', async func
         }
     }
 
-    // Construire la réservation
     const reservationData = {
         serviceId,
         clientName,
@@ -231,12 +219,10 @@ document.getElementById('reservationForm').addEventListener('submit', async func
         const reservationId = data.id;
         const amount = data.amount || totalAmount || 0;
 
-        // Afficher la section paiement
         document.getElementById('paymentSection').style.display = 'block';
         document.getElementById('amountToPay').textContent = amount + ' FCFA';
         document.getElementById('reservationId').value = reservationId;
 
-        // Configurer le bouton de paiement
         document.getElementById('payButton').onclick = function() {
             initiatePayment(reservationId, amount, clientName, selectedService.name);
         };
@@ -248,7 +234,7 @@ document.getElementById('reservationForm').addEventListener('submit', async func
 });
 
 // ================================================================
-// INITIATION DU PAIEMENT AVEC FEDAPAY
+// INITIATION DU PAIEMENT AVEC FEDAPAY (VERSION CORRIGÉE)
 // ================================================================
 async function initiatePayment(reservationId, amount, customerName, serviceName) {
     // 1. Créer la transaction sur le backend
@@ -271,12 +257,19 @@ async function initiatePayment(reservationId, amount, customerName, serviceName)
         return;
     }
 
-    // 2. Ouvrir le widget FedaPay
+    // 2. Ouvrir le widget FedaPay avec checkout.js
     try {
+        // ✅ Vérifier que FedaPay est chargé
+        if (typeof FedaPay === 'undefined') {
+            alert('❌ Le système de paiement n\'est pas disponible. Veuillez rafraîchir la page.');
+            return;
+        }
+
+        // ✅ FedaPay.init avec checkout.js
         const widget = FedaPay.init({
             public_key: FEDAPAY_PUBLIC_KEY,
             transaction: {
-                amount: Math.round(amount), // XOF n'a pas de sous-unité
+                amount: Math.round(amount),
                 description: `Paiement pour ${serviceName}`
             },
             customer: {
@@ -286,6 +279,7 @@ async function initiatePayment(reservationId, amount, customerName, serviceName)
             },
             onComplete: function(response) {
                 if (response.reason === FedaPay.CHECKOUT_COMPLETED) {
+                    // ✅ Paiement réussi
                     console.log('✅ Paiement réussi:', response.transaction);
                     alert('✅ Paiement effectué avec succès ! Vous recevrez un email de confirmation.');
                     window.location.href = '/confirmation.html?status=success';
@@ -295,6 +289,7 @@ async function initiatePayment(reservationId, amount, customerName, serviceName)
             }
         });
         widget.open();
+        
     } catch (error) {
         console.error('❌ Erreur FedaPay:', error);
         alert('❌ Erreur lors de l\'ouverture du paiement: ' + error.message);

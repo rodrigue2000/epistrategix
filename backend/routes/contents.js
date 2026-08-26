@@ -106,8 +106,8 @@ router.post('/purchase', async (req, res) => {
     // 3. Créer la transaction FedaPay
     const amount = content.price;
     const response = await fedapay.post('/v1/transactions', {
-      amount: Math.round(amount * 100),
-      currency: 'XOF',
+      amount: Math.round(amount),
+      currency: { iso: 'XOF' },
       description: `Achat de contenu : ${content.title}`,
       customer: {
         email: customerEmail || 'client@exemple.com',
