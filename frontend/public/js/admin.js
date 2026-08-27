@@ -32,8 +32,8 @@ firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
 // ================================================================
 // VARIABLES GLOBALES
 // ================================================================
-let servicesMap = {}; // Cache ID → Nom du service
-let currentFilter = 'paid'; // 'paid' ou 'all'
+let servicesMap = {};
+let currentFilter = 'paid';
 
 // ================================================================
 // CHARGER LA MAP DES SERVICES (ID → NOM)
@@ -115,16 +115,34 @@ firebase.auth().onAuthStateChanged(async user => {
 // ================================================================
 async function loadReservations(token, filter = 'paid') {
     try {
+        console.log('🔍 Chargement réservations - Filtre:', filter);
+        console.log('🔍 Token:', token?.substring(0, 30) + '...');
+        
         const url = filter === 'all' 
             ? `${API_URL}/api/admin/reservations/export?filter=all`
             : `${API_URL}/api/admin/reservations/export`;
             
         const response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
         });
         
-        if (!response.ok) throw new Error('Erreur chargement réservations');
+        if (response.status === 401) {
+            console.error('❌ Token invalide ou expiré');
+            await firebase.auth().signOut();
+            window.location.href = 'login.html';
+            return;
+        }
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erreur chargement réservations');
+        }
+        
         const reservations = await response.json();
+        console.log(`✅ ${reservations.length} réservations chargées`);
         
         const tbody = document.querySelector('#reservationsTable tbody');
         if (!tbody) return;
@@ -142,7 +160,6 @@ async function loadReservations(token, filter = 'paid') {
             const tr = document.createElement('tr');
             const serviceName = servicesMap[r.serviceId] || r.serviceId || 'Service inconnu';
             
-            // Statut avec couleur
             const statusColors = {
                 pending: { bg: '#fff3cd', color: '#856404', label: 'En attente' },
                 paid: { bg: '#d4edda', color: '#155724', label: 'Payée' },
@@ -183,15 +200,14 @@ async function loadReservations(token, filter = 'paid') {
             tbody.appendChild(tr);
         });
         
-        // Mettre à jour l'indicateur de filtre
         const filterStatus = document.getElementById('filterStatus');
         if (filterStatus) {
             filterStatus.textContent = `Affichage : ${filter === 'paid' ? 'Payées uniquement' : 'Toutes'}`;
         }
         
-        console.log(`✅ ${reservations.length} réservations chargées (filtre: ${filter})`);
     } catch (error) {
         console.error('❌ Erreur chargement réservations:', error);
+        throw error;
     }
 }
 
@@ -225,7 +241,7 @@ function setupFilterButtons(token) {
 }
 
 // ================================================================
-// GÉRER UNE ACTION SUR UNE RÉSERVATION (confirmer/annuler)
+// GÉRER UNE ACTION SUR UNE RÉSERVATION
 // ================================================================
 window.handleReservationAction = async function(id, status) {
     const user = firebase.auth().currentUser;
@@ -237,7 +253,6 @@ window.handleReservationAction = async function(id, status) {
     try {
         const token = await user.getIdToken();
         
-        // Mettre à jour le statut
         const response = await fetch(`${API_URL}/api/admin/reservations/${id}/status`, {
             method: 'PUT',
             headers: {
@@ -255,10 +270,7 @@ window.handleReservationAction = async function(id, status) {
         const data = await response.json();
         console.log('✅ Statut mis à jour:', data);
         
-        // OUVRIRE LA MODALE WHATSAPP
         await openWhatsAppModal(id, status, token);
-        
-        // Recharger les réservations
         await loadReservations(token, currentFilter);
         alert(`✅ Réservation ${status === 'confirmed' ? 'confirmée' : 'annulée'} avec succès !`);
 
@@ -283,7 +295,6 @@ async function openWhatsAppModal(reservationId, status, token) {
             return;
         }
         
-        // Remplir la modale
         const modal = document.getElementById('whatsappModal');
         const phoneEl = document.getElementById('whatsappPhone');
         const messageEl = document.getElementById('whatsappMessage');
@@ -293,8 +304,6 @@ async function openWhatsAppModal(reservationId, status, token) {
             phoneEl.textContent = data.phone || 'Numéro non disponible';
             messageEl.textContent = data.message || '';
             linkEl.href = data.whatsappLink || '#';
-            
-            // Afficher la modale
             modal.style.display = 'flex';
         }
     } catch (error) {
@@ -315,7 +324,6 @@ function setupWhatsAppModal() {
         });
     }
     
-    // Fermer en cliquant à l'extérieur
     if (modal) {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {

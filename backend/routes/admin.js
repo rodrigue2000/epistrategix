@@ -41,29 +41,29 @@ router.get('/kpi', verifyToken, isAdmin, async (req, res) => {
       reservations: { pending, paid, confirmed, cancelled },
     });
   } catch (error) {
+    console.error('❌ Erreur KPI:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// 2. EXPORT DES RÉSERVATIONS (avec filtrage des pending)
+// 2. EXPORT DES RÉSERVATIONS
 // ============================================================
 router.get('/reservations/export', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { filter } = req.query; // 'all' ou 'paid' (par défaut: 'paid')
+    console.log('🔍 Export réservations - Token valide');
+    console.log('👤 User ID:', req.user?.uid);
     
-    let query = db.collection('reservations').orderBy('createdAt', 'desc');
-    
-    // ✅ Par défaut, on ne montre que les réservations payées
-    if (filter !== 'all') {
-      query = query.where('status', '==', 'paid');
-    }
-    
-    const snapshot = await query.get();
+    const snapshot = await db.collection('reservations')
+      .orderBy('createdAt', 'desc')
+      .get();
+      
     const reservations = [];
     snapshot.forEach(doc => reservations.push({ id: doc.id, ...doc.data() }));
+    console.log(`✅ ${reservations.length} réservations exportées`);
     res.json(reservations);
   } catch (error) {
+    console.error('❌ Erreur export réservations:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -85,35 +85,31 @@ router.get('/reservations/:id', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============================================================
-// 4. METTRE À JOUR LE STATUT D'UNE RÉSERVATION + LIEN WHATSAPP
+// 4. METTRE À JOUR LE STATUT D'UNE RÉSERVATION
 // ============================================================
 router.put('/reservations/:id/status', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body; // 'confirmed' ou 'cancelled'
+  const { status } = req.body;
   
   if (!['confirmed', 'cancelled'].includes(status)) {
-    return res.status(400).json({ error: 'Statut invalide. Utilisez "confirmed" ou "cancelled"' });
+    return res.status(400).json({ error: 'Statut invalide' });
   }
   
   try {
-    // 1. Récupérer la réservation
     const doc = await db.collection('reservations').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({ error: 'Réservation non trouvée' });
     }
     const reservation = doc.data();
     
-    // 2. Récupérer le nom du service
     const serviceDoc = await db.collection('services').doc(reservation.serviceId).get();
     const serviceName = serviceDoc.exists ? serviceDoc.data().name : 'Service';
     
-    // 3. Mettre à jour le statut
     await db.collection('reservations').doc(id).update({
       status: status,
       updatedAt: new Date().toISOString()
     });
     
-    // 4. Générer le message WhatsApp
     const statusText = status === 'confirmed' ? 'confirmée ✅' : 'annulée ❌';
     const message = `
 ${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusText} !
@@ -124,18 +120,15 @@ ${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusTex
 👤 Client : ${reservation.clientName}
 
 ${status === 'confirmed' ? 'Merci pour votre confiance ! 🙏' : 'Nous sommes désolés pour ce contretemps.'}
-
-Pour toute question, contactez-nous au +225 XX XX XX XX.
     `.trim();
     
-    // Nettoyer le numéro
     const phone = (reservation.clientPhone || '').replace(/[\s\-\(\)]/g, '');
     const whatsappLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
     
     res.json({
       success: true,
       message: `Réservation ${status}`,
-      reservation: { id, ...reservation, status },
+      status: status,
       whatsapp: {
         link: whatsappLink,
         message: message,
@@ -144,13 +137,13 @@ Pour toute question, contactez-nous au +225 XX XX XX XX.
     });
     
   } catch (error) {
-    console.error('Erreur mise à jour statut:', error);
+    console.error('❌ Erreur mise à jour statut:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// 5. BLOCAGE MANUEL D'UN CRÉNEAU (PLAGE HORAIRE)
+// 5. BLOCAGE MANUEL (PLAGE HORAIRE)
 // ============================================================
 router.post('/block', verifyToken, isAdmin, async (req, res) => {
   const { date, startTime, endTime, reason } = req.body;
@@ -161,8 +154,12 @@ router.post('/block', verifyToken, isAdmin, async (req, res) => {
     });
   }
   
-  // Vérifier que startTime < endTime
-  if (startTime >= endTime) {
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+  const startTotal = startH * 60 + startM;
+  const endTotal = endH * 60 + endM;
+  
+  if (startTotal >= endTotal) {
     return res.status(400).json({ 
       error: 'L\'heure de début doit être avant l\'heure de fin' 
     });
@@ -181,13 +178,13 @@ router.post('/block', verifyToken, isAdmin, async (req, res) => {
     const docRef = await db.collection('blocks').add(block);
     res.status(201).json({ id: docRef.id, ...block });
   } catch (error) {
-    console.error('Erreur blocage:', error);
+    console.error('❌ Erreur blocage:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// 6. LISTER TOUS LES BLOCAGES
+// 6. LISTER LES BLOCAGES
 // ============================================================
 router.get('/blocks', verifyToken, isAdmin, async (req, res) => {
   try {
@@ -220,7 +217,7 @@ router.delete('/block/:id', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============================================================
-// 8. GÉNÉRER UN LIEN WHATSAPP POUR UNE RÉSERVATION
+// 8. GÉNÉRER UN LIEN WHATSAPP
 // ============================================================
 router.get('/whatsapp-link/:reservationId/:status', verifyToken, isAdmin, async (req, res) => {
   const { reservationId, status } = req.params;
@@ -230,18 +227,15 @@ router.get('/whatsapp-link/:reservationId/:status', verifyToken, isAdmin, async 
   }
   
   try {
-    // Récupérer la réservation
     const doc = await db.collection('reservations').doc(reservationId).get();
     if (!doc.exists) {
       return res.status(404).json({ error: 'Réservation non trouvée' });
     }
     const reservation = doc.data();
     
-    // Récupérer le service
     const serviceDoc = await db.collection('services').doc(reservation.serviceId).get();
     const serviceName = serviceDoc.exists ? serviceDoc.data().name : 'Service';
     
-    // Générer le message
     const statusText = status === 'confirmed' ? 'confirmée ✅' : 'annulée ❌';
     const message = `
 ${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusText} !
@@ -254,7 +248,6 @@ ${status === 'confirmed' ? '✅' : '❌'} Votre réservation a été ${statusTex
 ${status === 'confirmed' ? 'Merci pour votre confiance ! 🙏' : 'Nous sommes désolés pour ce contretemps.'}
     `.trim();
     
-    // Nettoyer le numéro
     const phone = (reservation.clientPhone || '').replace(/[\s\-\(\)]/g, '');
     const whatsappLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
     
@@ -268,7 +261,7 @@ ${status === 'confirmed' ? 'Merci pour votre confiance ! 🙏' : 'Nous sommes d�
     });
     
   } catch (error) {
-    console.error('Erreur génération lien WhatsApp:', error);
+    console.error('❌ Erreur génération lien WhatsApp:', error);
     res.status(500).json({ error: error.message });
   }
 });

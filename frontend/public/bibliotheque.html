@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -194,15 +194,15 @@
             const downloadLink = document.getElementById('downloadLink');
             
             if (modal && downloadLink) {
-                // ✅ Ajouter ?dl=1 pour forcer le téléchargement
-                const downloadUrl = url.includes('?') ? `${url}&dl=1` : `${url}?dl=1`;
-                downloadLink.href = downloadUrl;
-                downloadLink.download = `${title || 'fichier'}.pdf`;
+                const filename = `${title || 'fichier'}.pdf`;
+                downloadLink.href = url;
+                downloadLink.download = filename;
+                downloadLink.target = '_blank';
                 downloadLink.textContent = `📥 Télécharger ${title || 'le contenu'}`;
                 modal.style.display = 'flex';
                 
                 setTimeout(() => {
-                    window.open(downloadUrl, '_blank');
+                    window.open(url, '_blank');
                 }, 1000);
             }
         }

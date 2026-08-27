@@ -131,7 +131,7 @@
                     </div>
                 `).join('');
             } catch (error) {
-                console.error('Erreur chargement réservations:', error);
+                console.error('❌ Erreur chargement réservations:', error);
             }
         }
 
@@ -233,7 +233,7 @@
                     </div>
                 `).join('');
             } catch (error) {
-                console.error('Erreur chargement blocages:', error);
+                console.error('❌ Erreur chargement blocages:', error);
                 document.getElementById('blocksList').innerHTML = '<p style="color:#c73b3b;">Erreur de chargement des blocages.</p>';
             }
         }
@@ -286,8 +286,13 @@
                 return;
             }
 
-            if (startTime >= endTime) {
-                errorDiv.textContent = '⚠️ L\'heure de début doit être avant l\'heure de fin.';
+            const [startH, startM] = startTime.split(':').map(Number);
+            const [endH, endM] = endTime.split(':').map(Number);
+            const startTotal = startH * 60 + startM;
+            const endTotal = endH * 60 + endM;
+            
+            if (startTotal >= endTotal) {
+                errorDiv.textContent = `⚠️ L'heure de début (${startTime}) doit être avant l'heure de fin (${endTime}).`;
                 errorDiv.style.display = 'block';
                 return;
             }
