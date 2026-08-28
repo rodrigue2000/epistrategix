@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -6,7 +6,8 @@
     <title>Bibliothèque - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
+    <!-- ✅ Le SDK FedaPay checkout.js n'est plus nécessaire :
+         le paiement se fait maintenant par redirection vers l'URL générée par le backend -->
 </head>
 <body>
     <header>
@@ -37,28 +38,8 @@
         </div>
     </footer>
 
-    <!-- MODALE DE CONFIRMATION D'ACHAT -->
-    <div id="purchaseModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-        <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-            <div style="font-size:4rem; color:#1f9a6e; margin-bottom:1rem;">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <h3 style="color:#0a2647;">✅ Achat réussi !</h3>
-            <p style="color:#4d6f94; margin:0.5rem 0 1.5rem 0;">
-                Le téléchargement va commencer automatiquement.
-            </p>
-            <a id="downloadLink" href="#" target="_blank" class="btn btn-success" style="display:inline-flex; align-items:center; gap:0.5rem;">
-                <i class="fas fa-download"></i> Télécharger maintenant
-            </a>
-            <button onclick="closePurchaseModal()" class="btn btn-outline" style="margin-top:1rem; display:block; width:100%; justify-content:center;">
-                <i class="fas fa-times"></i> Fermer
-            </button>
-        </div>
-    </div>
-
     <script>
         const API_URL = 'https://epistrategix-backend.onrender.com';
-        const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is';
 
         // ================================================================
         // CHARGER LES CONTENUS
@@ -68,7 +49,7 @@
             .then(contents => {
                 const container = document.getElementById('contentsList');
                 container.innerHTML = '';
-                
+
                 if (contents.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state" style="grid-column:1/-1;">
@@ -82,12 +63,12 @@
                 contents.forEach(content => {
                     const card = document.createElement('div');
                     card.className = 'content-card';
-                    
+
                     const isFree = content.priceType === 'free';
                     const priceDisplay = isFree ? '📄 Gratuit' : `💰 ${content.price || 0} FCFA`;
                     const buttonText = isFree ? 'Télécharger' : 'Acheter';
                     const buttonClass = isFree ? 'btn btn-secondary' : 'btn btn-success';
-                    
+
                     card.innerHTML = `
                         <h3>${escapeHtml(content.title)}</h3>
                         <p style="color:#4d6f94; font-size:0.9rem;">${content.type || 'Fichier'}</p>
@@ -127,8 +108,12 @@
         }
 
         // ================================================================
-        // GESTION DE L'ACTION SUR UN CONTENU
+        // GESTION DE L'ACTION SUR UN CONTENU (VERSION CORRIGÉE)
         // ================================================================
+        // ✅ On ne recrée plus de transaction côté client avec FedaPay.init().
+        //    On redirige simplement vers l'URL de paiement générée par le backend,
+        //    qui contient déjà metadata.contentId — indispensable pour que le
+        //    webhook FedaPay sache quel contenu marquer comme acheté.
         async function handleContentAction(contentId, priceType, price, url, title) {
             if (priceType === 'free') {
                 window.open(url, '_blank');
@@ -147,78 +132,20 @@
                 });
 
                 const data = await response.json();
-                
-                if (!response.ok) {
+
+                if (!response.ok || !data.url) {
                     alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
                     return;
                 }
 
-                if (typeof FedaPay === 'undefined') {
-                    alert('❌ Le système de paiement n\'est pas disponible. Veuillez rafraîchir la page.');
-                    return;
-                }
-
-                const widget = FedaPay.init({
-                    public_key: FEDAPAY_PUBLIC_KEY,
-                    transaction: {
-                        amount: Math.round(price),
-                        description: `Achat de contenu : ${title}`
-                    },
-                    customer: {
-                        email: 'client@exemple.com',
-                        firstname: 'Client',
-                        lastname: ''
-                    },
-                    onComplete: function(response) {
-                        if (response.reason === FedaPay.CHECKOUT_COMPLETED) {
-                            console.log('✅ Paiement réussi:', response.transaction);
-                            showPurchaseModal(url, title);
-                        } else if (response.reason === FedaPay.DIALOG_DISMISSED) {
-                            console.log('👆 Fenêtre de paiement fermée');
-                        }
-                    }
-                });
-                widget.open();
+                // ✅ Redirection vers la transaction créée côté backend
+                window.location.href = data.url;
 
             } catch (error) {
                 console.error('❌ Erreur:', error);
                 alert('❌ Erreur lors de l\'ouverture du paiement: ' + error.message);
             }
         }
-
-        // ================================================================
-        // AFFICHER LA MODALE DE CONFIRMATION D'ACHAT
-        // ================================================================
-        function showPurchaseModal(url, title) {
-            const modal = document.getElementById('purchaseModal');
-            const downloadLink = document.getElementById('downloadLink');
-            
-            if (modal && downloadLink) {
-                const filename = `${title || 'fichier'}.pdf`;
-                downloadLink.href = url;
-                downloadLink.download = filename;
-                downloadLink.target = '_blank';
-                downloadLink.textContent = `📥 Télécharger ${title || 'le contenu'}`;
-                modal.style.display = 'flex';
-                
-                setTimeout(() => {
-                    window.open(url, '_blank');
-                }, 1000);
-            }
-        }
-
-        // ================================================================
-        // FERMER LA MODALE
-        // ================================================================
-        function closePurchaseModal() {
-            document.getElementById('purchaseModal').style.display = 'none';
-        }
-
-        document.getElementById('purchaseModal')?.addEventListener('click', function(e) {
-            if (e.target === this) {
-                closePurchaseModal();
-            }
-        });
     </script>
 </body>
 </html>

@@ -22,26 +22,12 @@
 
     <main>
         <div class="container" style="text-align: center; padding: 3rem 1rem;">
-            <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <h2 style="font-size: 2rem; margin-bottom: 1rem;">Paiement confirmé !</h2>
-            <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 2rem;">
-                Votre réservation a été enregistrée avec succès. Vous recevrez un email de confirmation avec tous les détails.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                <a href="index.html" class="btn btn-primary">
-                    <i class="fas fa-home"></i> Retour à l'accueil
-                </a>
-                <a href="reservation.html" class="btn btn-secondary">
-                    <i class="fas fa-calendar-plus"></i> Nouvelle réservation
-                </a>
-            </div>
-            <div style="margin-top: 2.5rem; padding: 1.5rem; background: #f8faff; border-radius: 1rem; border: 1px solid #e2ebf6; max-width: 500px; margin-left: auto; margin-right: auto;">
-                <p style="font-size: 0.9rem; color: #4d6f94;">
-                    <i class="fas fa-info-circle"></i> Un email de confirmation vous a été envoyé.
-                    Pour toute question, contactez-nous via WhatsApp.
-                </p>
+            <div id="confirmationContent">
+                <!-- Rempli dynamiquement par le script ci-dessous -->
+                <div style="font-size: 5rem; color: #4d6f94; margin-bottom: 1.5rem;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Vérification en cours...</h2>
             </div>
         </div>
     </main>
@@ -51,5 +37,133 @@
             <p>&copy; 2025 EpiStrategix - Tous droits réservés</p>
         </div>
     </footer>
+
+    <script>
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+
+        const params = new URLSearchParams(window.location.search);
+        const status = params.get('status');
+        const type = params.get('type');
+        const transactionId = params.get('transaction');
+
+        const container = document.getElementById('confirmationContent');
+
+        function navLinks() {
+            return `
+                <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                    <a href="index.html" class="btn btn-primary">
+                        <i class="fas fa-home"></i> Retour à l'accueil
+                    </a>
+                    <a href="bibliotheque.html" class="btn btn-secondary">
+                        <i class="fas fa-book"></i> Bibliothèque
+                    </a>
+                    <a href="reservation.html" class="btn btn-outline">
+                        <i class="fas fa-calendar-plus"></i> Nouvelle réservation
+                    </a>
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function renderReservationSuccess() {
+            container.innerHTML = `
+                <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Paiement confirmé !</h2>
+                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 2rem;">
+                    Votre réservation a été enregistrée avec succès. Vous recevrez une confirmation avec tous les détails.
+                </p>
+                ${navLinks()}
+                <div style="margin-top: 2.5rem; padding: 1.5rem; background: #f8faff; border-radius: 1rem; border: 1px solid #e2ebf6; max-width: 500px; margin-left: auto; margin-right: auto;">
+                    <p style="font-size: 0.9rem; color: #4d6f94;">
+                        <i class="fas fa-info-circle"></i> Pour toute question, contactez-nous via WhatsApp.
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderContentSuccess(data) {
+            container.innerHTML = `
+                <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Achat confirmé !</h2>
+                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 1.5rem;">
+                    Merci pour votre achat de <strong>${escapeHtml(data.contentTitle)}</strong>.
+                </p>
+                <a href="${data.contentUrl}" target="_blank" class="btn btn-success" style="margin-bottom:1.5rem; display:inline-flex; align-items:center; gap:0.5rem;">
+                    <i class="fas fa-download"></i> Télécharger maintenant
+                </a>
+                <br>
+                ${navLinks()}
+            `;
+        }
+
+        function renderPending() {
+            container.innerHTML = `
+                <div style="font-size: 5rem; color: #e0a800; margin-bottom: 1.5rem;">
+                    <i class="fas fa-hourglass-half"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Paiement en cours de traitement</h2>
+                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 2rem;">
+                    Merci de patienter quelques instants, votre confirmation arrive...
+                </p>
+            `;
+        }
+
+        function renderError(message) {
+            container.innerHTML = `
+                <div style="font-size: 5rem; color: #c73b3b; margin-bottom: 1.5rem;">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Une erreur est survenue</h2>
+                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 2rem;">
+                    ${escapeHtml(message)}
+                </p>
+                ${navLinks()}
+            `;
+        }
+
+        async function fetchContentPurchase(id, attemptsLeft = 5) {
+            try {
+                const res = await fetch(`${API_URL}/api/contents/transaction/${id}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    renderError(data.error || 'Impossible de récupérer votre achat.');
+                    return;
+                }
+
+                if (data.status === 'approved') {
+                    renderContentSuccess(data);
+                } else if (attemptsLeft > 0) {
+                    // Le webhook FedaPay n'a peut-être pas encore traité l'événement, on retente
+                    renderPending();
+                    setTimeout(() => fetchContentPurchase(id, attemptsLeft - 1), 2000);
+                } else {
+                    renderError('Le paiement est en cours de vérification. Rafraîchissez cette page dans un instant.');
+                }
+            } catch (err) {
+                renderError('Erreur réseau, veuillez réessayer.');
+            }
+        }
+
+        // ================================================================
+        // ROUTAGE SELON LES PARAMÈTRES D'URL
+        // ================================================================
+        if (status === 'success' && type === 'content' && transactionId) {
+            fetchContentPurchase(transactionId);
+        } else if (status === 'success') {
+            renderReservationSuccess();
+        } else {
+            renderError('Le paiement n\'a pas abouti. Vous pouvez réessayer.');
+        }
+    </script>
 </body>
 </html>

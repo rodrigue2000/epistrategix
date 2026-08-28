@@ -1,12 +1,7 @@
- // ================================================================
+// ================================================================
 // CONFIGURATION
 // ================================================================
 const API_URL = 'https://epistrategix-backend.onrender.com';
-
-// ================================================================
-// FEDAPAY CONFIGURATION
-// ================================================================
-const FEDAPAY_PUBLIC_KEY = 'pk_live_5eX9S0e_AnsbuJ0bX7dGo0is';
 
 // ================================================================
 // VARIABLES GLOBALES
@@ -25,7 +20,7 @@ fetch(`${API_URL}/api/services`)
             const opt = document.createElement('option');
             opt.value = s.id;
             let label = s.name;
-            
+
             if (s.priceType === 'fixed') {
                 label += ` (${s.price} FCFA)`;
             } else if (s.priceType === 'free') {
@@ -33,7 +28,7 @@ fetch(`${API_URL}/api/services`)
             } else if (s.priceType === 'unit') {
                 label += ` (${s.unitPrice || 0} FCFA/${s.durationUnit || 60}min)`;
             }
-            
+
             opt.textContent = label;
             select.appendChild(opt);
         });
@@ -45,7 +40,7 @@ fetch(`${API_URL}/api/services`)
 document.getElementById('serviceSelect').addEventListener('change', function() {
     const serviceId = this.value;
     if (!serviceId) return;
-    
+
     fetch(`${API_URL}/api/services/${serviceId}`)
         .then(res => res.json())
         .then(service => {
@@ -62,38 +57,38 @@ function updateDurationAndPrice(service) {
     const durationContainer = document.getElementById('durationContainer');
     const durationUnitsInput = document.getElementById('durationUnits');
     const pricePreview = document.getElementById('pricePreview');
-    
+
     if (!service || !durationContainer) return;
-    
+
     if (service.priceType === 'unit') {
         durationContainer.style.display = 'block';
-        
+
         const unitDuration = service.durationUnit || 60;
         const unitPrice = service.unitPrice || 0;
         const minUnits = service.minDuration || 1;
         const maxUnits = service.maxDuration || 10;
-        
+
         durationUnitsInput.min = minUnits;
         durationUnitsInput.max = maxUnits;
         durationUnitsInput.value = minUnits;
         durationUnitsInput.step = 1;
-        
-        document.getElementById('durationUnitLabel').textContent = 
+
+        document.getElementById('durationUnitLabel').textContent =
             `(${unitDuration} min/unité)`;
         document.getElementById('minDurationDisplay').textContent = minUnits;
         document.getElementById('maxDurationDisplay').textContent = maxUnits;
-        
+
         durationUnits = minUnits;
         const totalPrice = unitPrice * durationUnits;
         pricePreview.textContent = `💰 ${totalPrice} FCFA`;
         document.getElementById('totalAmount').value = totalPrice;
-        
+
     } else if (service.priceType === 'fixed') {
         durationContainer.style.display = 'none';
         pricePreview.textContent = `💰 ${service.price || 0} FCFA`;
         document.getElementById('totalAmount').value = service.price || 0;
         durationUnits = 1;
-        
+
     } else {
         durationContainer.style.display = 'none';
         pricePreview.textContent = `💰 Gratuit`;
@@ -109,13 +104,13 @@ document.getElementById('durationUnits')?.addEventListener('input', function() {
     const units = parseInt(this.value) || 1;
     const pricePreview = document.getElementById('pricePreview');
     const totalAmount = document.getElementById('totalAmount');
-    
+
     if (!selectedService || selectedService.priceType !== 'unit') return;
-    
+
     const unitPrice = selectedService.unitPrice || 0;
     const minUnits = selectedService.minDuration || 1;
     const maxUnits = selectedService.maxDuration || 10;
-    
+
     if (units < minUnits) {
         this.value = minUnits;
         durationUnits = minUnits;
@@ -125,7 +120,7 @@ document.getElementById('durationUnits')?.addEventListener('input', function() {
     } else {
         durationUnits = units;
     }
-    
+
     const totalPrice = unitPrice * durationUnits;
     pricePreview.textContent = `💰 ${totalPrice} FCFA`;
     totalAmount.value = totalPrice;
@@ -138,18 +133,18 @@ document.getElementById('reservationDate').addEventListener('change', function()
     const date = this.value;
     const serviceId = document.getElementById('serviceSelect').value;
     if (!date || !serviceId) return;
-    
+
     fetch(`${API_URL}/api/reservations/available?date=${date}&serviceId=${serviceId}`)
         .then(res => res.json())
         .then(slots => {
             const timeSelect = document.getElementById('reservationTime');
             timeSelect.innerHTML = '<option value="">-- Choisir une heure --</option>';
-            
+
             if (slots.length === 0) {
                 timeSelect.innerHTML += '<option value="" disabled>Aucun créneau disponible</option>';
                 return;
             }
-            
+
             slots.forEach(slot => {
                 const opt = document.createElement('option');
                 opt.value = slot;
@@ -165,7 +160,7 @@ document.getElementById('reservationDate').addEventListener('change', function()
 // ================================================================
 document.getElementById('reservationForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
+
     const serviceId = document.getElementById('serviceSelect').value;
     const clientName = document.getElementById('clientName').value.trim();
     const clientPhone = document.getElementById('clientPhone').value.trim();
@@ -208,9 +203,9 @@ document.getElementById('reservationForm').addEventListener('submit', async func
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reservationData)
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok) {
             alert(data.error || 'Erreur lors de la réservation');
             return;
@@ -236,8 +231,11 @@ document.getElementById('reservationForm').addEventListener('submit', async func
 // ================================================================
 // INITIATION DU PAIEMENT AVEC FEDAPAY (VERSION CORRIGÉE)
 // ================================================================
+// ✅ On ne recrée plus de transaction côté client avec FedaPay.init().
+//    On redirige simplement vers l'URL de paiement générée par le backend,
+//    qui contient déjà metadata.reservationId — indispensable pour que le
+//    webhook FedaPay sache quelle réservation marquer comme "paid".
 async function initiatePayment(reservationId, amount, customerName, serviceName) {
-    // 1. Créer la transaction sur le backend
     const response = await fetch(`${API_URL}/api/payments/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,46 +250,11 @@ async function initiatePayment(reservationId, amount, customerName, serviceName)
 
     const data = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok || !data.url) {
         alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
         return;
     }
 
-    // 2. Ouvrir le widget FedaPay avec checkout.js
-    try {
-        // ✅ Vérifier que FedaPay est chargé
-        if (typeof FedaPay === 'undefined') {
-            alert('❌ Le système de paiement n\'est pas disponible. Veuillez rafraîchir la page.');
-            return;
-        }
-
-        // ✅ FedaPay.init avec checkout.js
-        const widget = FedaPay.init({
-            public_key: FEDAPAY_PUBLIC_KEY,
-            transaction: {
-                amount: Math.round(amount),
-                description: `Paiement pour ${serviceName}`
-            },
-            customer: {
-                email: 'client@exemple.com',
-                firstname: customerName.split(' ')[0],
-                lastname: customerName.split(' ').slice(1).join(' ') || customerName.split(' ')[0]
-            },
-            onComplete: function(response) {
-                if (response.reason === FedaPay.CHECKOUT_COMPLETED) {
-                    // ✅ Paiement réussi
-                    console.log('✅ Paiement réussi:', response.transaction);
-                    alert('✅ Paiement effectué avec succès ! Vous recevrez un email de confirmation.');
-                    window.location.href = '/confirmation.html?status=success';
-                } else if (response.reason === FedaPay.DIALOG_DISMISSED) {
-                    console.log('👆 Fenêtre de paiement fermée');
-                }
-            }
-        });
-        widget.open();
-        
-    } catch (error) {
-        console.error('❌ Erreur FedaPay:', error);
-        alert('❌ Erreur lors de l\'ouverture du paiement: ' + error.message);
-    }
+    // ✅ Redirection vers la transaction créée côté backend
+    window.location.href = data.url;
 }

@@ -1,4 +1,4 @@
- const express = require('express');
+const express = require('express');
 const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
 const { db } = require('../config/firebase');
@@ -82,7 +82,7 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
 // ============================================================
 router.post('/purchase', async (req, res) => {
   const { contentId, customerName, customerEmail } = req.body;
-  
+
   if (!contentId) {
     return res.status(400).json({ error: 'ID du contenu requis' });
   }
@@ -93,20 +93,20 @@ router.post('/purchase', async (req, res) => {
     if (!doc.exists) {
       return res.status(404).json({ error: 'Contenu non trouvé' });
     }
-    
+
     const content = doc.data();
-    
+
     // 2. Vérifier que le contenu est payant
     if (content.priceType !== 'paid' || !content.price || content.price <= 0) {
-      return res.status(400).json({ 
-        error: 'Ce contenu est gratuit ou n\'a pas de prix défini' 
+      return res.status(400).json({
+        error: 'Ce contenu est gratuit ou n\'a pas de prix défini'
       });
     }
 
     // 3. Créer la transaction FedaPay
     const amount = content.price;
     const response = await fedapay.post('/v1/transactions', {
-      amount: Math.round(amount), // En centimes
+      amount: Math.round(amount),
       currency: { iso: 'XOF' },
       description: `Achat de contenu : ${content.title}`,
       customer: {
@@ -125,14 +125,24 @@ router.post('/purchase', async (req, res) => {
     // ✅ RÉCUPÉRER LA TRANSACTION (dans "v1/transaction")
     const transaction = response.data['v1/transaction'] || response.data;
     const transactionId = String(transaction.id);
-    
+
+    // ✅ Générer le VRAI lien de paiement
+    // (l'API FedaPay ne renvoie pas d'URL directement à la création de la transaction,
+    //  il faut appeler /v1/transactions/{id}/token pour l'obtenir)
+    const tokenResponse = await fedapay.post(`/v1/transactions/${transaction.id}/token`);
+    const paymentUrl = tokenResponse.data.url;
+
+    if (!paymentUrl) {
+      throw new Error('Impossible de générer le lien de paiement FedaPay');
+    }
+
     console.log('✅ Transaction FedaPay créée:', {
       id: transactionId,
       reference: transaction.reference,
       status: transaction.status,
-      payment_url: transaction.payment_url
+      payment_url: paymentUrl
     });
-    
+
     // 4. Enregistrer la transaction
     await db.collection('transactions').doc(transactionId).set({
       contentId: contentId,
@@ -140,6 +150,7 @@ router.post('/purchase', async (req, res) => {
       amount: amount,
       status: transaction.status || 'pending',
       fedapayTransaction: transaction,
+      paymentUrl,
       createdAt: new Date().toISOString(),
     });
 
@@ -147,14 +158,14 @@ router.post('/purchase', async (req, res) => {
     res.json({
       success: true,
       transactionId: transactionId,
-      url: transaction.payment_url || transaction.url,
+      url: paymentUrl, // ✅ vraie URL de paiement
       contentTitle: content.title,
       contentUrl: content.url
     });
-    
+
   } catch (error) {
     console.error('❌ Erreur achat contenu:', error.response?.data || error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Erreur lors de l\'achat du contenu',
       details: error.response?.data?.message || error.message
     });
@@ -166,7 +177,7 @@ router.post('/purchase', async (req, res) => {
 // ============================================================
 router.get('/callback', (req, res) => {
   const { status, transaction_id } = req.query;
-  
+
   if (status === 'success' || status === 'approved') {
     res.redirect(`${process.env.FRONTEND_URL}/confirmation.html?status=success&type=content&transaction=${transaction_id || ''}`);
   } else {
@@ -180,7 +191,7 @@ router.get('/callback', (req, res) => {
 router.get('/purchased/:contentId', async (req, res) => {
   const { contentId } = req.params;
   const { email } = req.query;
-  
+
   if (!contentId || !email) {
     return res.status(400).json({ error: 'ContentId et email requis' });
   }
@@ -190,9 +201,48 @@ router.get('/purchased/:contentId', async (req, res) => {
       .where('contentId', '==', contentId)
       .where('customerEmail', '==', email)
       .get();
-    
+
     const purchased = !snapshot.empty;
     res.json({ purchased });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 7. RÉCUPÉRER LES INFOS D'UN ACHAT PAR TRANSACTION (pour confirmation.html)
+// ============================================================
+router.get('/transaction/:transactionId', async (req, res) => {
+  const { transactionId } = req.params;
+  try {
+    const txDoc = await db.collection('transactions').doc(transactionId).get();
+    if (!txDoc.exists) {
+      return res.status(404).json({ error: 'Transaction non trouvée' });
+    }
+    const tx = txDoc.data();
+
+    if (tx.status !== 'approved') {
+      // Le webhook n'a peut-être pas encore traité l'événement
+      return res.json({ status: tx.status || 'pending' });
+    }
+
+    const contentId = tx.contentId;
+    if (!contentId) {
+      return res.status(400).json({ error: 'Transaction non liée à un contenu' });
+    }
+
+    const contentDoc = await db.collection('contents').doc(contentId).get();
+    if (!contentDoc.exists) {
+      return res.status(404).json({ error: 'Contenu non trouvé' });
+    }
+    const content = contentDoc.data();
+
+    res.json({
+      status: 'approved',
+      contentId,
+      contentTitle: content.title,
+      contentUrl: content.url
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

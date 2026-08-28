@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -6,8 +6,8 @@
     <title>Réservation - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- FedaPay SDK -->
-    <script src="https://cdn.fedapay.com/checkout.js?v=1.1.7"></script>
+    <!-- ✅ Le SDK FedaPay checkout.js n'est plus nécessaire :
+         le paiement se fait maintenant par redirection vers l'URL générée par le backend -->
 </head>
 <body>
     <header>
@@ -25,7 +25,7 @@
     <main>
         <div class="container">
             <h2>Réserver un créneau</h2>
-            
+
             <form id="reservationForm">
                 <!-- ===== SERVICE ===== -->
                 <div class="form-group">
@@ -95,8 +95,8 @@
                     <i class="fas fa-credit-card"></i> Paiement sécurisé
                 </h3>
                 <p style="color:#4d6f94;">
-                    Montant à payer : 
-                    <span id="amountToPay" style="font-weight:700; color:#1e5fb0; font-size:1.3rem;">0</span> 
+                    Montant à payer :
+                    <span id="amountToPay" style="font-weight:700; color:#1e5fb0; font-size:1.3rem;">0</span>
                     <span style="font-weight:700; color:#1e5fb0; font-size:1.3rem;">FCFA</span>
                 </p>
                 <p style="font-size:0.85rem; color:#7b95b5; margin:0.5rem 0 1rem 0;">

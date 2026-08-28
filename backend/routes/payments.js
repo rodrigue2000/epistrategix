@@ -1,4 +1,4 @@
- const express = require('express');
+const express = require('express');
 const { db } = require('../config/firebase');
 const fedapay = require('../config/fedapay');
 
@@ -15,6 +15,7 @@ router.post('/initiate', async (req, res) => {
     const firstname = nameParts[0];
     const lastname = nameParts.slice(1).join(' ') || 'Client';
 
+    // 1. Créer la transaction
     const response = await fedapay.post('/v1/transactions', {
       amount: Math.round(amount),
       currency: { iso: 'XOF' },
@@ -26,20 +27,39 @@ router.post('/initiate', async (req, res) => {
       },
       callback_url: `${process.env.BASE_URL}/api/payments/callback`,
       metadata: {
-        reservationId,
+        reservationId, // ✅ indispensable pour que le webhook retrouve la réservation
       },
     });
 
     const transaction = response.data['v1/transaction'];
     if (!transaction || !transaction.id) {
-  throw new Error('Réponse FedaPay inattendue: ' + JSON.stringify(response.data));
-}
+      throw new Error('Réponse FedaPay inattendue: ' + JSON.stringify(response.data));
+    }
 
+    // 2. ✅ Générer le VRAI lien de paiement
+    // (l'API FedaPay ne renvoie pas d'URL directement à la création de la transaction,
+    //  il faut appeler /v1/transactions/{id}/token pour l'obtenir)
+    const tokenResponse = await fedapay.post(`/v1/transactions/${transaction.id}/token`);
+    const paymentUrl = tokenResponse.data.url;
+
+    if (!paymentUrl) {
+      throw new Error('Impossible de générer le lien de paiement FedaPay');
+    }
+
+    console.log('✅ Transaction FedaPay créée:', {
+      id: transaction.id,
+      reference: transaction.reference,
+      status: transaction.status,
+      payment_url: paymentUrl,
+    });
+
+    // 3. Enregistrer la transaction
     await db.collection('transactions').doc(String(transaction.id)).set({
       reservationId,
       amount,
       status: transaction.status,
       fedapayTransaction: transaction,
+      paymentUrl,
       createdAt: new Date().toISOString(),
     });
 
@@ -50,7 +70,7 @@ router.post('/initiate', async (req, res) => {
 
     res.json({
       transactionId: transaction.id,
-      url: transaction.url,
+      url: paymentUrl, // ✅ vraie URL de paiement
     });
   } catch (error) {
     console.error('Erreur FedaPay - status:', error.response?.status);
