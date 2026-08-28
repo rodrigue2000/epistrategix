@@ -1,4 +1,4 @@
- // ===== SERVEUR PRINCIPAL =====
+// ===== SERVEUR PRINCIPAL =====
 console.log('🚀 Démarrage du serveur...');
 
 const express = require('express');
@@ -6,9 +6,20 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Middleware
+// Middleware CORS (toujours global, ne pose pas de problème)
 app.use(cors());
-app.use(express.json());
+
+// ✅ IMPORTANT : express.json() ne doit PAS s'appliquer à la route webhook,
+// car le webhook FedaPay a besoin du corps brut (raw body) pour vérifier
+// la signature HMAC. Si express.json() parse le body avant, le webhook
+// reçoit un objet déjà parsé et la vérification de signature échoue
+// systématiquement, même avec la bonne URL et le bon secret.
+app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/webhooks/fedapay')) {
+        return next(); // on saute express.json() pour cette route
+    }
+    express.json()(req, res, next);
+});
 
 // === ROUTES DE BASE ===
 app.get('/', (req, res) => {
@@ -40,7 +51,7 @@ try {
 if (firebaseReady) {
     try {
         console.log('📦 Chargement des routes...');
-        
+
         const servicesRoutes = require('./routes/services');
         const reservationsRoutes = require('./routes/reservations');
         const paymentsRoutes = require('./routes/payments');
@@ -53,8 +64,11 @@ if (firebaseReady) {
         app.use('/api/payments', paymentsRoutes);
         app.use('/api/contents', contentsRoutes);
         app.use('/api/admin', adminRoutes);
-        app.use('/webhook/fedapay', webhookRoutes);
-        
+
+        // ✅ Chemin corrigé : "webhooks" au pluriel, pour correspondre
+        // exactement à l'URL déclarée dans le dashboard FedaPay
+        app.use('/webhooks/fedapay', webhookRoutes);
+
         console.log('✅ Routes API chargées avec succès');
     } catch (err) {
         console.error('❌ Erreur chargement routes:', err.message);
