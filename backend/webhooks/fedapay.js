@@ -1,32 +1,35 @@
 const express = require('express');
-const crypto = require('crypto');
+const { Webhook } = require('fedapay');
 const { db } = require('../config/firebase');
 
 const router = express.Router();
 
+// ✅ Le secret est spécifique à CETTE URL de webhook (visible dans le
+//    dashboard FedaPay → Webhooks → sélectionner l'endpoint → "Click to reveal")
+const endpointSecret = process.env.FEDAPAY_WEBHOOK_SECRET;
+
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
   const signature = req.headers['x-fedapay-signature'];
-  const payload = req.body.toString();
-  const secret = process.env.FEDAPAY_WEBHOOK_SECRET;
 
-  if (!signature || !secret) {
+  if (!signature || !endpointSecret) {
     console.error('❌ Configuration webhook manquante');
     return res.status(401).send('Configuration manquante');
   }
 
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-
-  if (signature !== expected) {
-    console.error('❌ Signature invalide');
-    return res.status(401).send('Invalid signature');
+  let event;
+  try {
+    // ✅ Utilise la librairie officielle FedaPay pour vérifier la signature.
+    //    Elle gère correctement le timestamp inclus dans X-FEDAPAY-SIGNATURE,
+    //    qu'un calcul HMAC manuel ne reproduit pas fidèlement.
+    event = Webhook.constructEvent(req.body, signature, endpointSecret);
+  } catch (err) {
+    console.error('❌ Signature invalide:', err.message);
+    return res.status(401).send(`Webhook Error: ${err.message}`);
   }
 
   try {
-    const event = JSON.parse(payload);
-    const transaction = event.data['v1/transaction'] || event.data;
+    // ✅ La transaction se trouve dans event.entity (pas event.data)
+    const transaction = event.entity;
 
     console.log(`📦 Webhook reçu: ${event.name} - Transaction: ${transaction.id}`);
 
@@ -42,8 +45,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       });
       console.log(`✅ Transaction ${transactionId} approuvée - Montant: ${amount}`);
 
-      // ✅ IMPORTANT : les données personnalisées sont dans "custom_metadata",
-      //    pas dans "metadata" (réservé à l'usage interne de FedaPay).
+      // ✅ Les données personnalisées sont dans "custom_metadata"
       const metadata = transaction.custom_metadata || {};
       const reservationId = metadata.reservationId;
 
@@ -68,17 +70,18 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         });
         console.log(`✅ Contenu ${metadata.contentId} acheté`);
       }
-    } else if (event.name === 'transaction.declined') {
-      await db.collection('transactions').doc(String(transaction.id)).update({
-        status: 'declined',
+    } else if (event.name === 'transaction.declined' || event.name === 'transaction.canceled') {
+      const transactionId = String(transaction.id);
+      await db.collection('transactions').doc(transactionId).update({
+        status: event.name === 'transaction.canceled' ? 'canceled' : 'declined',
         updatedAt: new Date().toISOString(),
       });
-      console.log(`⚠️ Transaction ${transaction.id} déclinée`);
+      console.log(`⚠️ Transaction ${transactionId} ${event.name === 'transaction.canceled' ? 'annulée' : 'déclinée'}`);
     }
 
-    res.sendStatus(200);
+    res.status(200).json({ received: true });
   } catch (error) {
-    console.error('❌ Erreur webhook:', error);
+    console.error('❌ Erreur traitement webhook:', error);
     res.sendStatus(500);
   }
 });
