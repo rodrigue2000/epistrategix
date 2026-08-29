@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -31,11 +31,24 @@
                     <input type="text" id="contentTitle" required placeholder="Titre du contenu">
                 </div>
                 <div class="form-group">
-                    <label>Type de contenu</label>
+                    <label>Type de contenu (format du fichier)</label>
                     <select id="contentType">
                         <option value="file">Fichier</option>
                         <option value="video">Vidéo</option>
                         <option value="pdf">PDF</option>
+                        <option value="audio">Audio</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Type de solution</label>
+                    <select id="contentSolutionType">
+                        <option value="guide">Guide</option>
+                        <option value="livre">Livre</option>
+                        <option value="formation">Formation</option>
+                        <option value="template">Modèle / Template</option>
+                        <option value="checklist">Checklist</option>
+                        <option value="etude_cas">Étude de cas</option>
+                        <option value="autre">Autre</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -66,7 +79,16 @@
     <script src="../js/admin.js"></script>
     <script>
         // ===== CODE SPÉCIFIQUE CONTENUS =====
-         
+
+        const SOLUTION_TYPE_LABELS = {
+            guide: 'Guide',
+            livre: 'Livre',
+            formation: 'Formation',
+            template: 'Modèle / Template',
+            checklist: 'Checklist',
+            etude_cas: 'Étude de cas',
+            autre: 'Autre'
+        };
 
         firebase.auth().onAuthStateChanged(async (user) => {
             if (!user) return;
@@ -94,6 +116,7 @@
                     <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:0.8rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
                         <div>
                             <strong>${c.title}</strong>
+                            ${c.solutionType ? `<span style="background:#eef4ff; color:#1e5fb0; font-size:0.75rem; padding:0.15rem 0.6rem; border-radius:40px; margin-left:0.6rem;">${SOLUTION_TYPE_LABELS[c.solutionType] || c.solutionType}</span>` : ''}
                             <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
                                 ${c.priceType === 'free' ? '📄 Gratuit' : '💰 ' + c.price + ' FCFA'}
                             </span>
@@ -118,6 +141,7 @@
 
             const title = document.getElementById('contentTitle').value.trim();
             const type = document.getElementById('contentType').value;
+            const solutionType = document.getElementById('contentSolutionType').value;
             const priceType = document.getElementById('contentPriceType').value;
             const price = parseFloat(document.getElementById('contentPrice').value);
             const file = document.getElementById('contentFile').files[0];
@@ -135,6 +159,7 @@
             const formData = new FormData();
             formData.append('title', title);
             formData.append('type', type);
+            formData.append('solutionType', solutionType);
             formData.append('priceType', priceType);
             formData.append('price', price);
             formData.append('file', file);

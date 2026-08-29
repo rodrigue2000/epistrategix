@@ -41,6 +41,16 @@
     <script>
         const API_URL = 'https://epistrategix-backend.onrender.com';
 
+        const SOLUTION_TYPE_LABELS = {
+            guide: 'Guide',
+            livre: 'Livre',
+            formation: 'Formation',
+            template: 'Modèle / Template',
+            checklist: 'Checklist',
+            etude_cas: 'Étude de cas',
+            autre: 'Autre'
+        };
+
         // ================================================================
         // CHARGER LES CONTENUS
         // ================================================================
@@ -71,7 +81,10 @@
 
                     card.innerHTML = `
                         <h3>${escapeHtml(content.title)}</h3>
-                        <p style="color:#4d6f94; font-size:0.9rem;">${content.type || 'Fichier'}</p>
+                        <p style="color:#4d6f94; font-size:0.9rem;">
+                            ${content.type || 'Fichier'}
+                            ${content.solutionType ? ` · ${SOLUTION_TYPE_LABELS[content.solutionType] || content.solutionType}` : ''}
+                        </p>
                         <p style="font-size:1.2rem; font-weight:700; color:${isFree ? '#1f9a6e' : '#1e5fb0'};">
                             ${priceDisplay}
                         </p>
@@ -91,6 +104,14 @@
                     </div>
                 `;
             });
+
+        // ✅ Force le téléchargement (au lieu de l'ouverture dans le navigateur)
+        // en insérant le flag Cloudinary "fl_attachment" dans l'URL.
+        function toDownloadUrl(url) {
+            if (!url || !url.includes('/upload/')) return url;
+            if (url.includes('fl_attachment')) return url;
+            return url.replace('/upload/', '/upload/fl_attachment/');
+        }
 
         // ================================================================
         // ÉCHAPPER LE HTML
@@ -116,7 +137,7 @@
         //    webhook FedaPay sache quel contenu marquer comme acheté.
         async function handleContentAction(contentId, priceType, price, url, title) {
             if (priceType === 'free') {
-                window.open(url, '_blank');
+                window.open(toDownloadUrl(url), '_blank');
                 return;
             }
 

@@ -70,6 +70,15 @@
             return String(text).replace(/[&<>"']/g, m => map[m]);
         }
 
+        // ✅ Force le téléchargement (au lieu de l'ouverture dans le navigateur)
+        // en insérant le flag Cloudinary "fl_attachment" dans l'URL, ce qui fait
+        // renvoyer l'en-tête Content-Disposition: attachment par le serveur.
+        function toDownloadUrl(url) {
+            if (!url || !url.includes('/upload/')) return url;
+            if (url.includes('fl_attachment')) return url; // déjà présent
+            return url.replace('/upload/', '/upload/fl_attachment/');
+        }
+
         function renderReservationSuccess() {
             container.innerHTML = `
                 <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
@@ -97,7 +106,7 @@
                 <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 1.5rem;">
                     Merci pour votre achat de <strong>${escapeHtml(data.contentTitle)}</strong>.
                 </p>
-                <a href="${data.contentUrl}" target="_blank" class="btn btn-success" style="margin-bottom:1.5rem; display:inline-flex; align-items:center; gap:0.5rem;">
+                <a href="${toDownloadUrl(data.contentUrl)}" class="btn btn-success" style="margin-bottom:1.5rem; display:inline-flex; align-items:center; gap:0.5rem;">
                     <i class="fas fa-download"></i> Télécharger maintenant
                 </a>
                 <br>
