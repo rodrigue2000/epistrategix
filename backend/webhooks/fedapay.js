@@ -1,4 +1,4 @@
- const express = require('express');
+const express = require('express');
 const crypto = require('crypto');
 const { db } = require('../config/firebase');
 
@@ -27,7 +27,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   try {
     const event = JSON.parse(payload);
     const transaction = event.data['v1/transaction'] || event.data;
-    
+
     console.log(`📦 Webhook reçu: ${event.name} - Transaction: ${transaction.id}`);
 
     if (event.name === 'transaction.approved') {
@@ -42,7 +42,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       });
       console.log(`✅ Transaction ${transactionId} approuvée - Montant: ${amount}`);
 
-      const metadata = transaction.metadata || {};
+      // ✅ IMPORTANT : les données personnalisées sont dans "custom_metadata",
+      //    pas dans "metadata" (réservé à l'usage interne de FedaPay).
+      const metadata = transaction.custom_metadata || {};
       const reservationId = metadata.reservationId;
 
       // ✅ Pour les réservations

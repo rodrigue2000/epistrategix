@@ -114,7 +114,9 @@ router.post('/purchase', async (req, res) => {
         name: customerName || 'Client',
       },
       callback_url: `${process.env.BASE_URL}/api/contents/callback`,
-      metadata: {
+      // ✅ "metadata" est réservé à l'usage interne de FedaPay (il l'écrase silencieusement).
+      //    Les données personnalisées doivent être envoyées dans "custom_metadata".
+      custom_metadata: {
         contentId: contentId,
         contentType: 'content_purchase',
         contentTitle: content.title,
@@ -176,10 +178,11 @@ router.post('/purchase', async (req, res) => {
 // 5. CALLBACK D'ACHAT DE CONTENU (redirection après paiement)
 // ============================================================
 router.get('/callback', (req, res) => {
-  const { status, transaction_id } = req.query;
+  // ✅ FedaPay renvoie ?id=...&status=... sur le callback_url, pas "transaction_id"
+  const { status, id } = req.query;
 
   if (status === 'success' || status === 'approved') {
-    res.redirect(`${process.env.FRONTEND_URL}/confirmation.html?status=success&type=content&transaction=${transaction_id || ''}`);
+    res.redirect(`${process.env.FRONTEND_URL}/confirmation.html?status=success&type=content&transaction=${id || ''}`);
   } else {
     res.redirect(`${process.env.FRONTEND_URL}/confirmation.html?status=failed&type=content`);
   }

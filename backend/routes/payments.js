@@ -26,7 +26,10 @@ router.post('/initiate', async (req, res) => {
         lastname,
       },
       callback_url: `${process.env.BASE_URL}/api/payments/callback`,
-      metadata: {
+      // ✅ "metadata" est réservé à l'usage interne de FedaPay (il l'écrase silencieusement,
+      //    comme le confirme le log FedaPay : expire_schedule_jobid, paid_customer, etc.)
+      //    Les données personnalisées doivent être envoyées dans "custom_metadata".
+      custom_metadata: {
         reservationId, // ✅ indispensable pour que le webhook retrouve la réservation
       },
     });
