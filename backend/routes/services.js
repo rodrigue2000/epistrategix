@@ -42,6 +42,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   const { 
     name, 
     description, 
+    provider,
     priceType, 
     price, 
     duration,
@@ -82,6 +83,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
     const newService = {
       name,
       description: description || '',
+      provider: provider || '',
       priceType, // 'fixed', 'free', 'unit'
       price: priceType === 'fixed' ? parseFloat(price) : null,
       duration: duration || 60,
