@@ -30,12 +30,21 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   try {
     // ✅ La transaction se trouve dans event.entity (pas event.data)
     const transaction = event.entity;
+    const transactionId = String(transaction.id);
 
-    console.log(`📦 Webhook reçu: ${event.name} - Transaction: ${transaction.id}`);
+    console.log(`📦 Webhook reçu: ${event.name} - Transaction: ${transactionId}`);
 
     if (event.name === 'transaction.approved') {
+      // ✅ IDEMPOTENCE : si cette transaction est déjà marquée "approved",
+      // on ne retraite pas l'événement (FedaPay peut renvoyer le même
+      // webhook plusieurs fois en cas de retry réseau).
+      const txDoc = await db.collection('transactions').doc(transactionId).get();
+      if (txDoc.exists && txDoc.data().status === 'approved') {
+        console.log(`ℹ️ Transaction ${transactionId} déjà traitée, on ignore ce doublon`);
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+
       const amount = transaction.amount;
-      const transactionId = String(transaction.id);
 
       // ✅ Mettre à jour la transaction
       await db.collection('transactions').doc(transactionId).update({
@@ -59,9 +68,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         console.log(`✅ Réservation ${reservationId} marquée comme payée`);
       }
 
-      // ✅ Pour les achats de contenu
+      // ✅ Pour les achats de contenu unique
       if (metadata.contentType === 'content_purchase' && metadata.contentId) {
-        await db.collection('purchased_content').add({
+        await db.collection('purchased_content').doc(transactionId).set({
           contentId: metadata.contentId,
           contentTitle: metadata.contentTitle || 'Contenu',
           transactionId: transactionId,
@@ -70,8 +79,19 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         });
         console.log(`✅ Contenu ${metadata.contentId} acheté`);
       }
+
+      // ✅ Pour les achats de pack (plusieurs contenus regroupés)
+      if (metadata.contentType === 'bundle_purchase' && metadata.bundleId) {
+        await db.collection('purchased_bundles').doc(transactionId).set({
+          bundleId: metadata.bundleId,
+          bundleTitle: metadata.bundleTitle || 'Pack',
+          transactionId: transactionId,
+          amount: amount,
+          purchasedAt: new Date().toISOString(),
+        });
+        console.log(`✅ Pack ${metadata.bundleId} acheté`);
+      }
     } else if (event.name === 'transaction.declined' || event.name === 'transaction.canceled') {
-      const transactionId = String(transaction.id);
       await db.collection('transactions').doc(transactionId).update({
         status: event.name === 'transaction.canceled' ? 'canceled' : 'declined',
         updatedAt: new Date().toISOString(),

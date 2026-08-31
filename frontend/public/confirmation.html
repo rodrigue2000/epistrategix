@@ -15,6 +15,7 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="support.html">Support</a>
                 <a href="admin/dashboard.html" class="btn-admin">Admin</a>
             </nav>
         </div>
@@ -35,6 +36,9 @@
     <footer>
         <div class="container">
             <p>&copy; 2025 EpiStrategix - Tous droits réservés</p>
+            <p style="margin-top:0.5rem; font-size:0.85rem;">
+                <a href="cgu.html">CGU</a> · <a href="confidentialite.html">Confidentialité</a> · <a href="support.html">Support</a>
+            </p>
         </div>
     </footer>
 
@@ -114,6 +118,32 @@
             `;
         }
 
+        function renderBundleSuccess(data) {
+            const itemsHtml = (data.items || []).map(item => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8faff; border:1px solid #e2ebf6; border-radius:1rem; padding:0.8rem 1rem; margin-bottom:0.6rem;">
+                    <span style="color:#0a2647; font-weight:500;">${escapeHtml(item.title)}</span>
+                    <a href="${toDownloadUrl(item.url)}" class="btn btn-success btn-sm" style="display:inline-flex; align-items:center; gap:0.4rem;">
+                        <i class="fas fa-download"></i> Télécharger
+                    </a>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Achat confirmé !</h2>
+                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 1.2rem;">
+                    Merci pour votre achat du pack <strong>${escapeHtml(data.bundleTitle)}</strong>.
+                    Voici vos ${(data.items || []).length} fichiers :
+                </p>
+                <div style="max-width: 500px; margin: 0 auto 1.5rem;">
+                    ${itemsHtml}
+                </div>
+                ${navLinks()}
+            `;
+        }
+
         function renderPending() {
             container.innerHTML = `
                 <div style="font-size: 5rem; color: #e0a800; margin-bottom: 1.5rem;">
@@ -163,11 +193,36 @@
             }
         }
 
+        async function fetchBundlePurchase(id, attemptsLeft = 5) {
+            try {
+                const res = await fetch(`${API_URL}/api/bundles/transaction/${id}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    renderError(data.error || 'Impossible de récupérer votre achat.');
+                    return;
+                }
+
+                if (data.status === 'approved') {
+                    renderBundleSuccess(data);
+                } else if (attemptsLeft > 0) {
+                    renderPending();
+                    setTimeout(() => fetchBundlePurchase(id, attemptsLeft - 1), 2000);
+                } else {
+                    renderError('Le paiement est en cours de vérification. Rafraîchissez cette page dans un instant.');
+                }
+            } catch (err) {
+                renderError('Erreur réseau, veuillez réessayer.');
+            }
+        }
+
         // ================================================================
         // ROUTAGE SELON LES PARAMÈTRES D'URL
         // ================================================================
         if (status === 'success' && type === 'content' && transactionId) {
             fetchContentPurchase(transactionId);
+        } else if (status === 'success' && type === 'bundle' && transactionId) {
+            fetchBundlePurchase(transactionId);
         } else if (status === 'success') {
             renderReservationSuccess();
         } else {

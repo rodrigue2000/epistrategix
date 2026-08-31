@@ -17,6 +17,7 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="support.html">Support</a>
                 <a href="admin/login.html" class="btn-admin">Admin</a>
             </nav>
         </div>
@@ -113,9 +114,38 @@
         </div>
     </main>
 
+    <!-- ===== MODALE DE CONFIRMATION AVANT PAIEMENT ===== -->
+    <div id="paymentConfirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="color:#0a2647; margin-bottom:1rem;">
+                <i class="fas fa-info-circle" style="color:#1e5fb0;"></i> Confirmer le paiement
+            </h3>
+            <p style="color:#3e6188; margin-bottom:0.3rem;">Vous êtes sur le point de payer :</p>
+            <p style="font-size:1.5rem; font-weight:700; color:#1e5fb0; margin-bottom:0.3rem;" id="confirmAmount">0 FCFA</p>
+            <p style="color:#3e6188; margin-bottom:1.2rem;">pour : <strong id="confirmServiceName"></strong></p>
+            <div style="background:#fff8e1; border:1px solid #f5deb3; border-radius:1rem; padding:1rem; margin-bottom:1.5rem;">
+                <p style="font-size:0.9rem; color:#8a6d1a; margin:0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Une fois le paiement effectué, <strong>aucun remboursement n'est possible</strong>. Vérifiez les informations avant de continuer.
+                </p>
+            </div>
+            <div style="display:flex; gap:0.8rem; flex-wrap:wrap;">
+                <button id="confirmPaymentBtn" class="btn btn-success" style="flex:1; justify-content:center; padding:0.8rem; min-width:150px;">
+                    <i class="fas fa-check"></i> Je confirme, payer
+                </button>
+                <button onclick="closePaymentConfirmModal()" class="btn btn-outline" style="flex:1; justify-content:center; min-width:100px;">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
     <footer>
         <div class="container">
             <p>&copy; 2025 EpiStrategix - Tous droits réservés</p>
+            <p style="margin-top:0.5rem; font-size:0.85rem;">
+                <a href="cgu.html">CGU</a> · <a href="confidentialite.html">Confidentialité</a> · <a href="support.html">Support</a>
+            </p>
         </div>
     </footer>
 

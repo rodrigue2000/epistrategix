@@ -24,11 +24,31 @@
 
     <main>
         <div class="container">
+            <h2>📁 Catégories (dossiers de contenu)</h2>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Ex: Finance, Marketing... Un contenu ou un pack peut appartenir à plusieurs catégories.
+            </p>
+            <form id="categoryForm" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
+                <input type="text" id="categoryName" placeholder="Nom de la catégorie" required style="flex:1; min-width:200px;">
+                <button type="submit" class="btn btn-secondary">
+                    <i class="fas fa-plus"></i> Ajouter
+                </button>
+            </form>
+            <div id="categoriesList" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:2rem;"></div>
+
             <h2>Uploader un nouveau contenu</h2>
             <form id="contentForm" enctype="multipart/form-data" style="max-width:100%;">
                 <div class="form-group">
                     <label>Titre</label>
                     <input type="text" id="contentTitle" required placeholder="Titre du contenu">
+                </div>
+                <div class="form-group">
+                    <label>Description (affichée au client)</label>
+                    <textarea id="contentDescription" placeholder="Décris clairement ce que contient ce fichier, à qui il s'adresse, ce que le client va en retirer..." rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Auteur / Créateur du contenu</label>
+                    <input type="text" id="contentAuthor" placeholder="ex: OLOKE Kossoum Rodrigue">
                 </div>
                 <div class="form-group">
                     <label>Type de contenu (format du fichier)</label>
@@ -52,6 +72,12 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label>Catégories (dossiers)</label>
+                    <div id="contentCategoryChecklist" style="border:1px solid #e2ebf6; border-radius:1rem; padding:0.8rem; background:white;">
+                        <p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée pour le moment.</p>
+                    </div>
+                </div>
+                <div class="form-group">
                     <label>Type de tarif</label>
                     <select id="contentPriceType">
                         <option value="free">Gratuit</option>
@@ -69,12 +95,125 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-upload"></i> Uploader
                 </button>
+
+                <div id="uploadProgressContainer" style="display:none; margin-top:1rem;">
+                    <div style="background:#e2ebf6; border-radius:40px; height:14px; overflow:hidden;">
+                        <div id="uploadProgressBar" style="background:#1e5fb0; height:100%; width:0%; transition:width 0.2s;"></div>
+                    </div>
+                    <p id="uploadProgressText" style="text-align:center; color:#4d6f94; font-size:0.85rem; margin-top:0.4rem;">0%</p>
+                </div>
             </form>
 
             <h3 style="margin-top: 2rem;">Contenus existants</h3>
             <div id="contentsList"></div>
+
+            <h2 style="margin-top: 3rem;">📦 Créer un pack (plusieurs contenus, un seul paiement)</h2>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Regroupe des vidéos, PDF ou audio déjà uploadés en un seul produit vendable
+                — utile pour un pack "impact" avec plusieurs vidéos + un guide PDF, par exemple.
+            </p>
+            <form id="bundleForm">
+                <div class="form-group">
+                    <label>Titre du pack</label>
+                    <input type="text" id="bundleTitle" required placeholder="Ex: Pack Impact Complet">
+                </div>
+                <div class="form-group">
+                    <label>Description (optionnel)</label>
+                    <input type="text" id="bundleDescription" placeholder="Courte description du pack">
+                </div>
+                <div class="form-group">
+                    <label>Prix (FCFA)</label>
+                    <input type="number" id="bundlePrice" required placeholder="0" step="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Contenus à inclure (coche au moins 2)</label>
+                    <div id="bundleContentChecklist" style="max-height:250px; overflow-y:auto; border:1px solid #e2ebf6; border-radius:1rem; padding:1rem; background:white;">
+                        <p style="color:#4d6f94;">Chargement...</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Catégories (dossiers)</label>
+                    <div id="bundleCategoryChecklist" style="border:1px solid #e2ebf6; border-radius:1rem; padding:0.8rem; background:white;">
+                        <p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée pour le moment.</p>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-box"></i> Créer le pack
+                </button>
+            </form>
+
+            <h3 style="margin-top: 2rem;">Packs existants</h3>
+            <div id="bundlesList"></div>
         </div>
     </main>
+
+    <!-- MODALE D'ÉDITION D'UN CONTENU -->
+    <div id="editContentModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="color:#0a2647; margin-bottom:1rem;">
+                <i class="fas fa-edit"></i> Modifier le contenu
+            </h3>
+            <input type="hidden" id="editContentId">
+            <div class="form-group">
+                <label>Titre</label>
+                <input type="text" id="editContentTitle" required>
+            </div>
+            <div class="form-group">
+                <label>Description (affichée au client)</label>
+                <textarea id="editContentDescription" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Auteur / Créateur du contenu</label>
+                <input type="text" id="editContentAuthor">
+            </div>
+            <div class="form-group">
+                <label>Type de solution</label>
+                <select id="editContentSolutionType">
+                    <option value="guide">Guide</option>
+                    <option value="livre">Livre</option>
+                    <option value="formation">Formation</option>
+                    <option value="template">Modèle / Template</option>
+                    <option value="checklist">Checklist</option>
+                    <option value="etude_cas">Étude de cas</option>
+                    <option value="autre">Autre</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Catégories</label>
+                <div id="editContentCategoryChecklist" style="border:1px solid #e2ebf6; border-radius:1rem; padding:0.8rem;"></div>
+            </div>
+            <div class="form-group">
+                <label>Type de tarif</label>
+                <select id="editContentPriceType">
+                    <option value="free">Gratuit</option>
+                    <option value="paid">Payant</option>
+                </select>
+            </div>
+            <div class="form-group" id="editPriceField">
+                <label>Prix (FCFA)</label>
+                <input type="number" id="editContentPrice" min="0" step="1">
+            </div>
+            <div style="display:flex; gap:0.6rem; margin-top:1rem;">
+                <button id="saveContentEditBtn" class="btn btn-primary" style="flex:1; justify-content:center;">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button onclick="closeEditContentModal()" class="btn btn-outline" style="flex:1; justify-content:center;">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+
+            <hr style="margin:1.5rem 0; border-color:#e2ebf6;">
+
+            <h4 style="color:#0a2647;">Remplacer le fichier (optionnel)</h4>
+            <p style="color:#4d6f94; font-size:0.85rem; margin-bottom:0.8rem;">
+                Le titre, le prix et les catégories restent inchangés — seul le fichier physique est remplacé.
+            </p>
+            <input type="file" id="replaceFileInput" style="margin-bottom:0.8rem;">
+            <button id="replaceFileBtn" class="btn btn-secondary" style="width:100%; justify-content:center;">
+                <i class="fas fa-file-upload"></i> Remplacer le fichier
+            </button>
+        </div>
+    </div>
 
     <script src="../js/admin.js"></script>
     <script>
@@ -90,16 +229,108 @@
             autre: 'Autre'
         };
 
+        let allCategories = [];
+
         firebase.auth().onAuthStateChanged(async (user) => {
             if (!user) return;
             const token = await user.getIdToken();
+            await loadCategories(token);
             loadContents(token);
+            loadBundleChecklist();
+            loadBundles(token);
         });
 
         // Afficher/masquer le champ prix
         document.getElementById('contentPriceType').addEventListener('change', function() {
             document.getElementById('priceField').style.display = this.value === 'paid' ? 'block' : 'none';
         });
+        document.getElementById('editContentPriceType').addEventListener('change', function() {
+            document.getElementById('editPriceField').style.display = this.value === 'paid' ? 'block' : 'none';
+        });
+
+        // ================================================================
+        // CATÉGORIES (dossiers de contenu)
+        // ================================================================
+        async function loadCategories(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/categories`);
+                allCategories = await response.json();
+                renderCategoriesList(token);
+                renderCategoryChecklist('contentCategoryChecklist');
+                renderCategoryChecklist('bundleCategoryChecklist');
+            } catch (error) {
+                console.error('Erreur chargement catégories:', error);
+            }
+        }
+
+        function renderCategoriesList(token) {
+            const container = document.getElementById('categoriesList');
+            if (allCategories.length === 0) {
+                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée.</p>';
+                return;
+            }
+            container.innerHTML = allCategories.map(cat => `
+                <span style="background:#eef4ff; color:#1e5fb0; padding:0.4rem 0.9rem; border-radius:40px; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.5rem;">
+                    ${escapeHtmlSimple(cat.name)}
+                    <i class="fas fa-times" style="cursor:pointer; color:#c73b3b;" onclick="deleteCategory('${cat.id}')"></i>
+                </span>
+            `).join('');
+        }
+
+        function renderCategoryChecklist(containerId) {
+            const container = document.getElementById(containerId);
+            if (allCategories.length === 0) {
+                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée pour le moment.</p>';
+                return;
+            }
+            container.innerHTML = allCategories.map(cat => `
+                <label style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; cursor:pointer;">
+                    <input type="checkbox" value="${cat.id}" class="${containerId}-checkbox">
+                    <span>${escapeHtmlSimple(cat.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const name = document.getElementById('categoryName').value.trim();
+            if (!name) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/categories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ name })
+                });
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                document.getElementById('categoryName').value = '';
+                loadCategories(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        window.deleteCategory = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+            if (!confirm('Supprimer cette catégorie ? Les contenus qui y étaient rattachés redeviendront non classés.')) return;
+
+            try {
+                const token = await user.getIdToken();
+                await fetch(`${API_URL}/api/categories/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                loadCategories(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
 
         async function loadContents(token) {
             try {
@@ -124,9 +355,14 @@
                                 <i class="fas fa-external-link-alt"></i>
                             </a>
                         </div>
-                        <button onclick="deleteContent('${c.id}')" class="btn btn-danger btn-sm">
-                            <i class="fas fa-trash-alt"></i> Supprimer
-                        </button>
+                        <div>
+                            <button onclick='openEditContentModal(${JSON.stringify(c)})' class="btn btn-outline btn-sm" style="margin-right:4px;">
+                                <i class="fas fa-edit"></i> Modifier
+                            </button>
+                            <button onclick="deleteContent('${c.id}')" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash-alt"></i> Supprimer
+                            </button>
+                        </div>
                     </div>
                 `).join('');
             } catch (error) {
@@ -140,6 +376,8 @@
             if (!user) return;
 
             const title = document.getElementById('contentTitle').value.trim();
+            const description = document.getElementById('contentDescription').value.trim();
+            const author = document.getElementById('contentAuthor').value.trim();
             const type = document.getElementById('contentType').value;
             const solutionType = document.getElementById('contentSolutionType').value;
             const priceType = document.getElementById('contentPriceType').value;
@@ -158,32 +396,71 @@
 
             const formData = new FormData();
             formData.append('title', title);
+            formData.append('description', description);
+            formData.append('author', author);
             formData.append('type', type);
             formData.append('solutionType', solutionType);
             formData.append('priceType', priceType);
             formData.append('price', price);
             formData.append('file', file);
 
+            const selectedCategoryIds = Array.from(document.querySelectorAll('.contentCategoryChecklist-checkbox:checked')).map(cb => cb.value);
+            formData.append('categoryIds', JSON.stringify(selectedCategoryIds));
+
+            const submitBtn = document.querySelector('#contentForm button[type="submit"]');
+            const originalBtnHtml = submitBtn.innerHTML;
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const progressText = document.getElementById('uploadProgressText');
+
             try {
                 const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/contents/upload`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
-                });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Erreur lors de l\'upload');
-                }
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upload en cours...';
+                progressContainer.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressText.textContent = '0%';
+
+                // ✅ XMLHttpRequest (au lieu de fetch) pour pouvoir suivre
+                // la progression réelle de l'upload, utile pour les gros fichiers.
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', `${API_URL}/api/contents/upload`);
+                    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+                    xhr.upload.onprogress = (event) => {
+                        if (event.lengthComputable) {
+                            const percent = Math.round((event.loaded / event.total) * 100);
+                            progressBar.style.width = percent + '%';
+                            progressText.textContent = percent + '%';
+                        }
+                    };
+
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            resolve();
+                        } else {
+                            let message = 'Erreur lors de l\'upload';
+                            try { message = JSON.parse(xhr.responseText).error || message; } catch (e) {}
+                            reject(new Error(message));
+                        }
+                    };
+
+                    xhr.onerror = () => reject(new Error('Erreur réseau pendant l\'upload'));
+
+                    xhr.send(formData);
+                });
 
                 alert('✅ Contenu uploadé avec succès');
                 document.getElementById('contentForm').reset();
                 loadContents(token);
             } catch (error) {
                 alert('Erreur: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHtml;
+                progressContainer.style.display = 'none';
             }
         });
 
@@ -211,6 +488,273 @@
                 alert('Erreur: ' + error.message);
             }
         };
+
+        // ================================================================
+        // PACKS DE CONTENUS (plusieurs fichiers, un seul paiement)
+        // ================================================================
+        async function loadBundleChecklist() {
+            try {
+                const response = await fetch(`${API_URL}/api/contents`);
+                const contents = await response.json();
+                const container = document.getElementById('bundleContentChecklist');
+
+                if (contents.length === 0) {
+                    container.innerHTML = '<p style="color:#4d6f94;">Aucun contenu disponible. Uploade d\'abord des fichiers individuels ci-dessus.</p>';
+                    return;
+                }
+
+                container.innerHTML = contents.map(c => `
+                    <label style="display:flex; align-items:center; gap:0.6rem; padding:0.4rem 0; cursor:pointer;">
+                        <input type="checkbox" value="${c.id}" class="bundle-content-checkbox">
+                        <span>${escapeHtmlSimple(c.title)} <span style="color:#4d6f94; font-size:0.8rem;">(${c.type || 'fichier'})</span></span>
+                    </label>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur chargement checklist:', error);
+            }
+        }
+
+        function escapeHtmlSimple(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        async function loadBundles(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/bundles`);
+                const bundles = await response.json();
+                const container = document.getElementById('bundlesList');
+
+                if (bundles.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:1rem;">Aucun pack créé.</p>';
+                    return;
+                }
+
+                container.innerHTML = bundles.map(b => `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:0.8rem; border:1px solid #e2ebf6;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                            <div>
+                                <strong>📦 ${escapeHtmlSimple(b.title)}</strong>
+                                <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">💰 ${b.price} FCFA</span>
+                                <span style="color:#4d6f94; font-size:0.85rem; margin-left:1rem;">${(b.items || []).length} contenu(s)</span>
+                            </div>
+                            <button onclick="deleteBundle('${b.id}')" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash-alt"></i> Supprimer
+                            </button>
+                        </div>
+                        <ul style="margin-top:0.6rem; padding-left:1.2rem; color:#4d6f94; font-size:0.85rem;">
+                            ${(b.items || []).map(i => `<li>${escapeHtmlSimple(i.title)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur chargement packs:', error);
+            }
+        }
+
+        document.getElementById('bundleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const title = document.getElementById('bundleTitle').value.trim();
+            const description = document.getElementById('bundleDescription').value.trim();
+            const price = parseFloat(document.getElementById('bundlePrice').value);
+            const contentIds = Array.from(document.querySelectorAll('.bundle-content-checkbox:checked')).map(cb => cb.value);
+
+            if (!title || isNaN(price) || price <= 0) {
+                alert('Titre et prix valide requis');
+                return;
+            }
+
+            if (contentIds.length < 2) {
+                alert('Sélectionne au moins 2 contenus pour former un pack');
+                return;
+            }
+
+            const submitBtn = document.querySelector('#bundleForm button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/bundles/admin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        title, description, priceType: 'paid', price, contentIds,
+                        categoryIds: Array.from(document.querySelectorAll('.bundleCategoryChecklist-checkbox:checked')).map(cb => cb.value)
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Erreur lors de la création du pack');
+
+                alert('✅ Pack créé avec succès');
+                document.getElementById('bundleForm').reset();
+                loadBundles(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+            }
+        });
+
+        window.deleteBundle = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            if (!confirm('Supprimer ce pack ? (les contenus individuels qui le composent ne seront pas supprimés)')) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/bundles/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur lors de la suppression');
+                }
+
+                alert('✅ Pack supprimé');
+                loadBundles(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        // ================================================================
+        // ÉDITION D'UN CONTENU (métadonnées uniquement)
+        // ================================================================
+        window.openEditContentModal = function(content) {
+            document.getElementById('editContentId').value = content.id;
+            document.getElementById('editContentTitle').value = content.title || '';
+            document.getElementById('editContentDescription').value = content.description || '';
+            document.getElementById('editContentAuthor').value = content.author || '';
+            document.getElementById('editContentSolutionType').value = content.solutionType || 'autre';
+            document.getElementById('editContentPriceType').value = content.priceType || 'free';
+            document.getElementById('editContentPrice').value = content.price || 0;
+            document.getElementById('editPriceField').style.display = content.priceType === 'paid' ? 'block' : 'none';
+
+            // Rendre la checklist de catégories avec les cases déjà cochées pour ce contenu
+            const container = document.getElementById('editContentCategoryChecklist');
+            if (allCategories.length === 0) {
+                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée.</p>';
+            } else {
+                const currentCategoryIds = content.categoryIds || [];
+                container.innerHTML = allCategories.map(cat => `
+                    <label style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; cursor:pointer;">
+                        <input type="checkbox" value="${cat.id}" class="editContentCategoryChecklist-checkbox" ${currentCategoryIds.includes(cat.id) ? 'checked' : ''}>
+                        <span>${escapeHtmlSimple(cat.name)}</span>
+                    </label>
+                `).join('');
+            }
+
+            document.getElementById('editContentModal').style.display = 'flex';
+        };
+
+        function closeEditContentModal() {
+            document.getElementById('editContentModal').style.display = 'none';
+        }
+
+        document.getElementById('saveContentEditBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const id = document.getElementById('editContentId').value;
+            const title = document.getElementById('editContentTitle').value.trim();
+            const description = document.getElementById('editContentDescription').value.trim();
+            const author = document.getElementById('editContentAuthor').value.trim();
+            const solutionType = document.getElementById('editContentSolutionType').value;
+            const priceType = document.getElementById('editContentPriceType').value;
+            const price = parseFloat(document.getElementById('editContentPrice').value);
+            const categoryIds = Array.from(document.querySelectorAll('.editContentCategoryChecklist-checkbox:checked')).map(cb => cb.value);
+
+            if (!title) {
+                alert('Le titre est requis');
+                return;
+            }
+
+            const btn = document.getElementById('saveContentEditBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/contents/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ title, description, author, solutionType, priceType, price, categoryIds })
+                });
+
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                alert('✅ Contenu mis à jour');
+                closeEditContentModal();
+                loadContents(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        });
+
+        // ================================================================
+        // REMPLACER LE FICHIER D'UN CONTENU (sans toucher aux métadonnées)
+        // ================================================================
+        document.getElementById('replaceFileBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const id = document.getElementById('editContentId').value;
+            const file = document.getElementById('replaceFileInput').files[0];
+
+            if (!file) {
+                alert('Sélectionne un fichier à uploader');
+                return;
+            }
+
+            if (!confirm('Remplacer le fichier actuel par ce nouveau fichier ? L\'ancien fichier sera définitivement supprimé.')) return;
+
+            const btn = document.getElementById('replaceFileBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Remplacement en cours...';
+
+            try {
+                const token = await user.getIdToken();
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_URL}/api/contents/${id}/replace-file`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                alert('✅ Fichier remplacé avec succès');
+                document.getElementById('replaceFileInput').value = '';
+                closeEditContentModal();
+                loadContents(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        });
     </script>
 </body>
 </html>

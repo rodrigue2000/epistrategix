@@ -1,10 +1,11 @@
 const express = require('express');
 const { db } = require('../config/firebase');
 const fedapay = require('../config/fedapay');
+const { paymentLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-router.post('/initiate', async (req, res) => {
+router.post('/initiate', paymentLimiter, async (req, res) => {
   const { reservationId, amount, customerEmail, customerName, serviceName } = req.body;
   if (!reservationId || !amount || amount <= 0) {
     return res.status(400).json({ error: 'Données de paiement invalides' });

@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -15,6 +15,7 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="support.html">Support</a>
                <a href="admin/login.html" class="btn-admin">Admin</a>
             </nav>
         </div>
@@ -39,7 +40,10 @@
 
     <footer>
         <div class="container">
-            <p>&copy; 2025 EpiStrategix - Tous droits réservés</p>
+            <p>&copy; 2026 EpiStrategix - Tous droits réservés</p>
+            <p style="margin-top:0.5rem; font-size:0.85rem;">
+                <a href="cgu.html">CGU</a> · <a href="confidentialite.html">Confidentialité</a> · <a href="support.html">Support</a>
+            </p>
         </div>
     </footer>
 
@@ -56,6 +60,7 @@
                     card.innerHTML = `
                         <h3>${service.name}</h3>
                         <p>${service.description || ''}</p>
+                        ${service.provider ? `<p style="color:#7b95b5; font-size:0.85rem; font-style:italic;">Par ${service.provider}</p>` : ''}
                         <p class="price">${service.priceType === 'fixed' ? service.price + ' FCFA' : 'Prix libre'}</p>
                         <a href="reservation.html?service=${service.id}" class="btn btn-secondary">Réserver</a>
                     `;

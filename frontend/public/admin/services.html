@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -32,8 +32,12 @@
                     <input type="text" id="serviceName" required placeholder="ex: Consulting stratégique">
                 </div>
                 <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="serviceDescription" placeholder="Description du service..."></textarea>
+                    <label>Description (affichée au client)</label>
+                    <textarea id="serviceDescription" placeholder="Décris clairement ce que comprend ce service, pour qui il est adapté, ce que le client peut en attendre..." rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Prestataire (qui rend le service)</label>
+                    <input type="text" id="serviceProvider" placeholder="ex: OLOKE Kossoum Rodrigue">
                 </div>
                 <div class="form-group">
                     <label>Type de tarif</label>
@@ -90,32 +94,109 @@
         </div>
     </main>
 
+    <!-- ===== MODALE D'ÉDITION D'UN SERVICE ===== -->
+    <div id="editServiceModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="color:#0a2647; margin-bottom:1rem;">
+                <i class="fas fa-edit"></i> Modifier le service
+            </h3>
+            <input type="hidden" id="editServiceId">
+            <div class="form-group">
+                <label>Nom du service</label>
+                <input type="text" id="editServiceName" required>
+            </div>
+            <div class="form-group">
+                <label>Description (affichée au client)</label>
+                <textarea id="editServiceDescription" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Prestataire (qui rend le service)</label>
+                <input type="text" id="editServiceProvider">
+            </div>
+            <div class="form-group">
+                <label>Type de tarif</label>
+                <select id="editPriceType">
+                    <option value="fixed">Prix fixe</option>
+                    <option value="free">Prix libre (gratuit)</option>
+                    <option value="unit">Tarification à l'unité de temps</option>
+                </select>
+            </div>
+            <div class="form-group" id="editFixedPriceSection">
+                <label>Prix (FCFA)</label>
+                <input type="number" id="editServicePrice" step="1" min="0">
+            </div>
+            <div id="editUnitPriceSection" style="display:none; border:1px solid #dce7f5; border-radius:1rem; padding:1rem; margin-bottom:1rem; background:#f8faff;">
+                <h4 style="color:#0a2647; margin-bottom:0.8rem;">⚡ Tarification à l'unité de temps</h4>
+                <div class="form-group">
+                    <label>Prix par unité de temps (FCFA)</label>
+                    <input type="number" id="editUnitPrice" step="1" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Durée d'une unité (minutes)</label>
+                    <select id="editDurationUnit">
+                        <option value="15">15 minutes</option>
+                        <option value="30">30 minutes</option>
+                        <option value="45">45 minutes</option>
+                        <option value="60">1 heure (60 min)</option>
+                        <option value="90">1h30 (90 min)</option>
+                        <option value="120">2 heures (120 min)</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1; min-width:100px;">
+                        <label>Durée minimale (unités)</label>
+                        <input type="number" id="editMinDuration" min="1" step="1">
+                    </div>
+                    <div class="form-group" style="flex:1; min-width:100px;">
+                        <label>Durée maximale (unités)</label>
+                        <input type="number" id="editMaxDuration" min="1" step="1">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Durée par défaut (minutes)</label>
+                <input type="number" id="editServiceDuration" min="15" step="15">
+            </div>
+            <div id="editServiceFormError" style="color:#c73b3b; margin-bottom:0.8rem; display:none;"></div>
+            <div style="display:flex; gap:0.6rem;">
+                <button id="saveServiceEditBtn" class="btn btn-primary" style="flex:1; justify-content:center;">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button onclick="closeEditServiceModal()" class="btn btn-outline" style="flex:1; justify-content:center;">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="../js/admin.js"></script>
     <script>
-        // ================================================================
-        // AFFICHER/MASQUER LES SECTIONS SELON LE TYPE DE TARIF
-        // ================================================================
         document.getElementById('priceType').addEventListener('change', function() {
             const value = this.value;
             document.getElementById('fixedPriceSection').style.display = value === 'fixed' ? 'block' : 'none';
             document.getElementById('unitPriceSection').style.display = value === 'unit' ? 'block' : 'none';
         });
 
-        // ================================================================
-        // CHARGER LES SERVICES
-        // ================================================================
+        document.getElementById('editPriceType').addEventListener('change', function() {
+            const value = this.value;
+            document.getElementById('editFixedPriceSection').style.display = value === 'fixed' ? 'block' : 'none';
+            document.getElementById('editUnitPriceSection').style.display = value === 'unit' ? 'block' : 'none';
+        });
+
+        let allServices = [];
+
         async function loadServices(token) {
             try {
                 const response = await fetch(`${API_URL}/api/services`);
-                const services = await response.json();
+                allServices = await response.json();
                 const container = document.getElementById('servicesList');
-                
-                if (services.length === 0) {
+
+                if (allServices.length === 0) {
                     container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucun service créé.</p>';
                     return;
                 }
 
-                container.innerHTML = services.map(s => {
+                container.innerHTML = allServices.map(s => {
                     let priceDisplay = '';
                     if (s.priceType === 'fixed') {
                         priceDisplay = s.price + ' FCFA (fixe)';
@@ -130,14 +211,17 @@
                     <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
                         <div>
                             <strong>${s.name}</strong>
-                            <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
+                            ${s.provider ? `<span style="color:#7b95b5; font-size:0.8rem; font-style:italic; margin-left:0.6rem;">Par ${s.provider}</span>` : ''}
+                            <br>
+                            <span style="color:#4d6f94; font-size:0.9rem;">
                                 ${priceDisplay}
                                 · ${s.duration || 60} min
                                 ${s.priceType === 'unit' ? `· min:${s.minDuration || 1} max:${s.maxDuration || 4}` : ''}
                             </span>
+                            ${s.description ? `<p style="color:#3e6188; font-size:0.85rem; margin-top:0.3rem; max-width:500px;">${s.description}</p>` : ''}
                         </div>
                         <div style="display:flex; gap:0.5rem;">
-                            <button onclick="editService('${s.id}')" class="btn btn-outline btn-sm">
+                            <button onclick="openEditServiceModal('${s.id}')" class="btn btn-outline btn-sm">
                                 <i class="fas fa-pen"></i>
                             </button>
                             <button onclick="deleteService('${s.id}')" class="btn btn-danger btn-sm">
@@ -152,9 +236,6 @@
             }
         }
 
-        // ================================================================
-        // AUTHENTIFICATION
-        // ================================================================
         firebase.auth().onAuthStateChanged(async (user) => {
             if (!user) {
                 window.location.href = 'login.html';
@@ -164,9 +245,6 @@
             loadServices(token);
         });
 
-        // ================================================================
-        // AJOUTER UN SERVICE
-        // ================================================================
         document.getElementById('serviceForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const user = firebase.auth().currentUser;
@@ -174,11 +252,12 @@
 
             const name = document.getElementById('serviceName').value.trim();
             const description = document.getElementById('serviceDescription').value.trim();
+            const provider = document.getElementById('serviceProvider').value.trim();
             const priceType = document.getElementById('priceType').value;
             const price = parseFloat(document.getElementById('servicePrice').value);
             const duration = parseInt(document.getElementById('serviceDuration').value) || 60;
             const errorDiv = document.getElementById('formError');
-            
+
             errorDiv.style.display = 'none';
             errorDiv.textContent = '';
 
@@ -188,7 +267,7 @@
                 return;
             }
 
-            const payload = { name, description, priceType, duration };
+            const payload = { name, description, provider, priceType, duration };
 
             if (priceType === 'fixed') {
                 if (isNaN(price) || price < 0) {
@@ -222,6 +301,11 @@
                 payload.price = null;
             }
 
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création en cours...';
+
             try {
                 const token = await user.getIdToken();
                 const response = await fetch(`${API_URL}/api/services`, {
@@ -244,65 +328,130 @@
             } catch (error) {
                 errorDiv.textContent = '❌ ' + error.message;
                 errorDiv.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
             }
         });
 
-        // ================================================================
-        // MODIFIER UN SERVICE
-        // ================================================================
-        window.editService = async function(id) {
+        window.openEditServiceModal = function(id) {
+            const service = allServices.find(s => s.id === id);
+            if (!service) {
+                alert('Service non trouvé');
+                return;
+            }
+
+            document.getElementById('editServiceId').value = service.id;
+            document.getElementById('editServiceName').value = service.name || '';
+            document.getElementById('editServiceDescription').value = service.description || '';
+            document.getElementById('editServiceProvider').value = service.provider || '';
+            document.getElementById('editPriceType').value = service.priceType || 'fixed';
+            document.getElementById('editServicePrice').value = service.price || 0;
+            document.getElementById('editServiceDuration').value = service.duration || 60;
+            document.getElementById('editUnitPrice').value = service.unitPrice || 0;
+            document.getElementById('editDurationUnit').value = service.durationUnit || 60;
+            document.getElementById('editMinDuration').value = service.minDuration || 1;
+            document.getElementById('editMaxDuration').value = service.maxDuration || 4;
+
+            document.getElementById('editFixedPriceSection').style.display = service.priceType === 'fixed' ? 'block' : 'none';
+            document.getElementById('editUnitPriceSection').style.display = service.priceType === 'unit' ? 'block' : 'none';
+
+            document.getElementById('editServiceFormError').style.display = 'none';
+            document.getElementById('editServiceModal').style.display = 'flex';
+        };
+
+        function closeEditServiceModal() {
+            document.getElementById('editServiceModal').style.display = 'none';
+        }
+
+        document.getElementById('saveServiceEditBtn').addEventListener('click', async () => {
             const user = firebase.auth().currentUser;
             if (!user) return;
 
-            try {
-                const token = await user.getIdToken();
-                const response = await fetch(`${API_URL}/api/services`);
-                const services = await response.json();
-                const service = services.find(s => s.id === id);
-                if (!service) {
-                    alert('Service non trouvé');
+            const errorDiv = document.getElementById('editServiceFormError');
+            errorDiv.style.display = 'none';
+
+            const id = document.getElementById('editServiceId').value;
+            const name = document.getElementById('editServiceName').value.trim();
+            const description = document.getElementById('editServiceDescription').value.trim();
+            const provider = document.getElementById('editServiceProvider').value.trim();
+            const priceType = document.getElementById('editPriceType').value;
+            const price = parseFloat(document.getElementById('editServicePrice').value);
+            const duration = parseInt(document.getElementById('editServiceDuration').value) || 60;
+
+            if (!name) {
+                errorDiv.textContent = '⚠️ Le nom est requis.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const payload = { name, description, provider, priceType, duration };
+
+            if (priceType === 'fixed') {
+                if (isNaN(price) || price < 0) {
+                    errorDiv.textContent = '⚠️ Veuillez entrer un prix valide.';
+                    errorDiv.style.display = 'block';
                     return;
                 }
+                payload.price = price;
+            } else if (priceType === 'unit') {
+                const unitPrice = parseFloat(document.getElementById('editUnitPrice').value);
+                const durationUnit = parseInt(document.getElementById('editDurationUnit').value);
+                const minDuration = parseInt(document.getElementById('editMinDuration').value) || 1;
+                const maxDuration = parseInt(document.getElementById('editMaxDuration').value) || 4;
 
-                const newName = prompt('Nouveau nom:', service.name);
-                if (newName === null) return;
-                
-                let updated = { name: newName.trim() };
-
-                if (service.priceType === 'fixed') {
-                    const newPrice = prompt('Nouveau prix (FCFA):', service.price);
-                    if (newPrice === null) return;
-                    updated.price = parseFloat(newPrice);
-                } else if (service.priceType === 'unit') {
-                    const newUnitPrice = prompt('Nouveau prix unitaire (FCFA):', service.unitPrice);
-                    if (newUnitPrice === null) return;
-                    updated.unitPrice = parseFloat(newUnitPrice);
+                if (isNaN(unitPrice) || unitPrice < 0) {
+                    errorDiv.textContent = '⚠️ Veuillez entrer un prix unitaire valide.';
+                    errorDiv.style.display = 'block';
+                    return;
                 }
+                if (minDuration > maxDuration) {
+                    errorDiv.textContent = '⚠️ La durée minimale ne peut pas être supérieure à la durée maximale.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                payload.unitPrice = unitPrice;
+                payload.durationUnit = durationUnit;
+                payload.minDuration = minDuration;
+                payload.maxDuration = maxDuration;
+                payload.price = null;
+            } else {
+                payload.price = null;
+            }
 
-                const updateResponse = await fetch(`${API_URL}/api/services/${id}`, {
+            const btn = document.getElementById('saveServiceEditBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/services/${id}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify(updated)
+                    body: JSON.stringify(payload)
                 });
 
-                if (!updateResponse.ok) {
-                    const error = await updateResponse.json();
+                if (!response.ok) {
+                    const error = await response.json();
                     throw new Error(error.error || 'Erreur lors de la modification');
                 }
 
                 alert('✅ Service modifié avec succès');
+                closeEditServiceModal();
                 loadServices(token);
             } catch (error) {
-                alert('❌ Erreur: ' + error.message);
+                errorDiv.textContent = '❌ ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
             }
-        };
+        });
 
-        // ================================================================
-        // SUPPRIMER UN SERVICE
-        // ================================================================
         window.deleteService = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
