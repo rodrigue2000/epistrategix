@@ -58,6 +58,7 @@ if (firebaseReady) {
         const contentsRoutes = require('./routes/contents');
         const bundlesRoutes = require('./routes/bundles');
         const categoriesRoutes = require('./routes/categories');
+        const purchasesRoutes = require('./routes/purchases');
         const adminRoutes = require('./routes/admin');
         const webhookRoutes = require('./webhooks/fedapay');
 
@@ -67,6 +68,7 @@ if (firebaseReady) {
         app.use('/api/contents', contentsRoutes);
         app.use('/api/bundles', bundlesRoutes);
         app.use('/api/categories', categoriesRoutes);
+        app.use('/api/purchases', purchasesRoutes);
         app.use('/api/admin', adminRoutes);
 
         // ✅ Chemin corrigé : "webhooks" au pluriel, pour correspondre
@@ -77,6 +79,17 @@ if (firebaseReady) {
     } catch (err) {
         console.error('❌ Erreur chargement routes:', err.message);
         console.error('Stack:', err.stack);
+
+        // ✅ Sans ce fallback, une erreur de chargement de route renvoyait une
+        // page HTML 404 par défaut d'Express au lieu de JSON, ce qui cassait
+        // silencieusement tous les fetch() côté frontend avec une erreur de
+        // parsing JSON peu explicite ("Unexpected token '<'").
+        app.use('/api', (req, res) => {
+            res.status(500).json({
+                error: 'Erreur de chargement des routes API',
+                hint: err.message
+            });
+        });
     }
 } else {
     console.warn('⚠️ Firebase non disponible - routes API désactivées');

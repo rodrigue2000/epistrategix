@@ -18,6 +18,7 @@
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
                 <a href="support.html">Support</a>
+                <a href="retrouver-achats.html">Retrouver mes achats</a>
                 <a href="admin/login.html" class="btn-admin">Admin</a>
             </nav>
         </div>
@@ -48,6 +49,10 @@
             <p style="color:#3e6188; margin-bottom:0.3rem;">Vous êtes sur le point d'acheter :</p>
             <p style="font-size:1.2rem; font-weight:700; color:#0a2647; margin-bottom:0.3rem;" id="confirmPurchaseTitle"></p>
             <p style="font-size:1.5rem; font-weight:700; color:#1e5fb0; margin-bottom:1.2rem;" id="confirmPurchaseAmount">0 FCFA</p>
+            <div class="form-group">
+                <label>Votre email (pour recevoir l'accès et pouvoir le retrouver plus tard)</label>
+                <input type="email" id="purchaseCustomerEmail" required placeholder="vous@exemple.com" style="width:100%; padding:0.6rem; border-radius:12px; border:1px solid #dce7f5;">
+            </div>
             <div style="background:#fff8e1; border:1px solid #f5deb3; border-radius:1rem; padding:1rem; margin-bottom:1.5rem;">
                 <p style="font-size:0.9rem; color:#8a6d1a; margin:0;">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -225,6 +230,11 @@
         function toDownloadUrl(url) {
             if (!url || !url.includes('/upload/')) return url;
             if (url.includes('fl_attachment')) return url;
+            // Cloudinary ne supporte pas les transformations (dont fl_attachment)
+            // sur les fichiers "raw" (Word, Excel, PowerPoint, ZIP) : les insérer
+            // casserait l'URL. Ces fichiers ne s'affichent de toute façon jamais
+            // inline dans le navigateur, ils se téléchargent déjà naturellement.
+            if (url.includes('/raw/upload/')) return url;
             return url.replace('/upload/', '/upload/fl_attachment/');
         }
 
@@ -281,6 +291,15 @@
         }
 
         async function proceedToPurchase(target) {
+            const emailInput = document.getElementById('purchaseCustomerEmail');
+            const customerEmail = emailInput.value.trim();
+
+            if (!customerEmail || !customerEmail.includes('@')) {
+                alert('Veuillez entrer un email valide — il vous permettra de retrouver votre achat plus tard.');
+                emailInput.focus();
+                return;
+            }
+
             const confirmBtn = document.getElementById('confirmPurchaseBtn');
             const originalBtnHtml = confirmBtn.innerHTML;
             confirmBtn.disabled = true;
@@ -291,8 +310,8 @@
                 ? `${API_URL}/api/bundles/purchase`
                 : `${API_URL}/api/contents/purchase`;
             const body = target.kind === 'bundle'
-                ? { bundleId: target.id, customerName: 'Client', customerEmail: 'client@exemple.com' }
-                : { contentId: target.id, customerName: 'Client', customerEmail: 'client@exemple.com' };
+                ? { bundleId: target.id, customerName: 'Client', customerEmail }
+                : { contentId: target.id, customerName: 'Client', customerEmail };
 
             try {
                 const response = await fetch(endpoint, {

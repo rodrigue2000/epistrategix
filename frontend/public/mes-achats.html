@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes achats - EpiStrategix</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
+            <nav>
+                <a href="index.html">Accueil</a>
+                <a href="reservation.html">Réserver</a>
+                <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="support.html">Support</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container" style="max-width: 700px; margin: 0 auto; padding: 3rem 1rem;">
+            <div id="content">
+                <div style="text-align:center; color:#4d6f94;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i>
+                    <p style="margin-top:0.5rem;">Vérification du lien...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 EpiStrategix - Tous droits réservés</p>
+        </div>
+    </footer>
+
+    <script>
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+        const container = document.getElementById('content');
+
+        function toDownloadUrl(url) {
+            if (!url || !url.includes('/upload/')) return url;
+            if (url.includes('fl_attachment')) return url;
+            if (url.includes('/raw/upload/')) return url;
+            return url.replace('/upload/', '/upload/fl_attachment/');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function renderError(message) {
+            container.innerHTML = `
+                <div style="text-align:center;">
+                    <div style="font-size:3rem; color:#c73b3b; margin-bottom:1rem;">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h2>Impossible d'afficher vos achats</h2>
+                    <p style="color:#4d6f94; margin:1rem 0;">${escapeHtml(message)}</p>
+                    <a href="retrouver-achats.html" class="btn btn-primary">Redemander un lien</a>
+                </div>
+            `;
+        }
+
+        function renderPurchases(data) {
+            if (!data.purchases || data.purchases.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center;">
+                        <h2>Aucun achat trouvé</h2>
+                        <p style="color:#4d6f94; margin:1rem 0;">
+                            Aucun achat n'est associé à l'email <strong>${escapeHtml(data.email)}</strong>.
+                        </p>
+                        <a href="bibliotheque.html" class="btn btn-primary">Voir la bibliothèque</a>
+                    </div>
+                `;
+                return;
+            }
+
+            const itemsHtml = data.purchases.map(purchase => {
+                if (purchase.type === 'content') {
+                    return `
+                        <div style="background:white; border:1px solid #e2ebf6; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                            <strong>${escapeHtml(purchase.title)}</strong>
+                            <a href="${toDownloadUrl(purchase.url)}" class="btn btn-success btn-sm">
+                                <i class="fas fa-download"></i> Télécharger
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    const subItems = (purchase.items || []).map(i => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-top:1px solid #e2ebf6;">
+                            <span>${escapeHtml(i.title)}</span>
+                            <a href="${toDownloadUrl(i.url)}" class="btn btn-success btn-sm">
+                                <i class="fas fa-download"></i> Télécharger
+                            </a>
+                        </div>
+                    `).join('');
+                    return `
+                        <div style="background:white; border:2px solid #1e5fb0; border-radius:1rem; padding:1.2rem; margin-bottom:1rem;">
+                            <strong>📦 ${escapeHtml(purchase.title)}</strong>
+                            ${subItems}
+                        </div>
+                    `;
+                }
+            }).join('');
+
+            container.innerHTML = `
+                <h2>📚 Vos achats</h2>
+                <p style="color:#4d6f94; margin-bottom:1.5rem;">Associés à ${escapeHtml(data.email)}</p>
+                ${itemsHtml}
+            `;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+
+        if (!token) {
+            renderError('Lien invalide : aucun token fourni.');
+        } else {
+            fetch(`${API_URL}/api/purchases/verify?token=${encodeURIComponent(token)}`)
+                .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok) {
+                        renderError(data.error || 'Lien invalide ou expiré.');
+                    } else {
+                        renderPurchases(data);
+                    }
+                })
+                .catch(() => renderError('Erreur réseau, veuillez réessayer.'));
+        }
+    </script>
+</body>
+</html>

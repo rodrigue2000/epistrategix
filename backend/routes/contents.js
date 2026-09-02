@@ -1,13 +1,48 @@
 const express = require('express');
 const multer = require('multer');
+const path = require('path');
 const cloudinary = require('../config/cloudinary');
 const { db } = require('../config/firebase');
 const verifyToken = require('../middleware/auth');
 const isAdmin = require('../middleware/admin');
 const fedapay = require('../config/fedapay');
+const { paymentLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
+
+// ✅ Ces formats sont traités par Cloudinary comme des fichiers "raw" (bruts) :
+// aucune analyse de contenu n'est faite, donc l'extension doit être déclarée
+// explicitement, sinon l'URL livrée n'a pas d'extension et l'appareil du
+// client ne sait pas quel programme utiliser pour l'ouvrir.
+const RAW_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'];
+
+function buildCloudinaryUploadOptions(originalname) {
+  const ext = path.extname(originalname).slice(1).toLowerCase();
+  const isRaw = RAW_EXTENSIONS.includes(ext);
+
+  const options = {
+    resource_type: isRaw ? 'raw' : 'auto',
+    folder: 'epistrategix',
+    use_filename: true,
+    unique_filename: true,
+    filename_override: originalname,
+  };
+
+  // ✅ Pour les fichiers "raw", on force explicitement le format : sans ça,
+  // Cloudinary ne l'attache pas fiablement à l'URL, contrairement aux images/
+  // vidéos où le format est détecté automatiquement par analyse du contenu.
+  if (isRaw) {
+    options.format = ext;
+  }
+
+  return options;
+}
+// ✅ Limite explicite de 100 Mo par fichier (au-delà, Multer renverra une erreur claire
+// au lieu de saturer silencieusement le disque éphémère de Render)
+const upload = multer({
+  dest: 'uploads/',
+  limits: { fileSize: 100 * 1024 * 1024 }
+});
 
 // ============================================================
 // 1. LISTER TOUS LES CONTENUS (public)
@@ -26,23 +61,48 @@ router.get('/', async (req, res) => {
 // ============================================================
 // 2. UPLOADER UN CONTENU (admin uniquement)
 // ============================================================
-router.post('/upload', verifyToken, isAdmin, upload.single('file'), async (req, res) => {
-  const { title, type, priceType, price } = req.body;
+router.post('/upload', verifyToken, isAdmin, (req, res, next) => {
+  // ✅ Capture l'erreur Multer (ex: fichier trop volumineux) pour renvoyer
+  // un message JSON clair au lieu d'une erreur brute non gérée.
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Fichier trop volumineux (maximum 100 Mo)' });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const { title, description, author, type, solutionType, priceType, price, categoryIds } = req.body;
   const file = req.file;
 
   if (!title || !file) {
     return res.status(400).json({ error: 'Titre et fichier requis' });
   }
 
+  // ✅ categoryIds arrive en JSON stringifié depuis le FormData (ex: '["id1","id2"]')
+  let parsedCategoryIds = [];
   try {
-    const result = await cloudinary.uploader.upload(file.path, {
-      resource_type: 'auto',
-      folder: 'epistrategix',
-    });
+    parsedCategoryIds = categoryIds ? JSON.parse(categoryIds) : [];
+    if (!Array.isArray(parsedCategoryIds)) parsedCategoryIds = [];
+  } catch (e) {
+    parsedCategoryIds = [];
+  }
+
+  try {
+    const result = await cloudinary.uploader.upload(
+      file.path,
+      buildCloudinaryUploadOptions(file.originalname)
+    );
 
     const content = {
       title,
+      description: description || '',
+      author: author || '',
       type: type || 'file',
+      solutionType: solutionType || 'autre',
+      categoryIds: parsedCategoryIds,
       url: result.secure_url,
       publicId: result.public_id,
       priceType: priceType || 'free',
@@ -54,6 +114,90 @@ router.post('/upload', verifyToken, isAdmin, upload.single('file'), async (req, 
   } catch (error) {
     console.error('Erreur Cloudinary:', error);
     res.status(500).json({ error: 'Erreur lors de l\'upload' });
+  }
+});
+
+// ============================================================
+// 2bis. MODIFIER LES MÉTADONNÉES D'UN CONTENU (admin uniquement)
+// ============================================================
+// ✅ Ne touche jamais au fichier (url/publicId) — uniquement le titre, la
+// description, l'auteur, le prix, le type de solution et les catégories.
+// Pour remplacer le fichier lui-même, voir la route POST /:id/replace-file.
+router.put('/:id', verifyToken, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { title, description, author, solutionType, priceType, price, categoryIds } = req.body;
+
+  try {
+    const doc = await db.collection('contents').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Contenu non trouvé' });
+
+    const updates = { updatedAt: new Date().toISOString() };
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (author !== undefined) updates.author = author;
+    if (solutionType !== undefined) updates.solutionType = solutionType;
+    if (priceType !== undefined) updates.priceType = priceType;
+    if (priceType === 'paid' && price !== undefined) updates.price = parseFloat(price);
+    if (priceType === 'free') updates.price = null;
+    if (Array.isArray(categoryIds)) updates.categoryIds = categoryIds;
+
+    await db.collection('contents').doc(id).update(updates);
+    res.json({ message: 'Contenu mis à jour', ...updates });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 2ter. REMPLACER LE FICHIER D'UN CONTENU (admin uniquement)
+// ============================================================
+// ✅ Action séparée et explicite : remplace uniquement le fichier physique,
+// conserve titre/prix/catégories inchangés, supprime l'ancien fichier Cloudinary.
+router.post('/:id/replace-file', verifyToken, isAdmin, (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Fichier trop volumineux (maximum 100 Mo)' });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const { id } = req.params;
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).json({ error: 'Fichier requis' });
+  }
+
+  try {
+    const doc = await db.collection('contents').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Contenu non trouvé' });
+    const oldData = doc.data();
+
+    const result = await cloudinary.uploader.upload(
+      file.path,
+      buildCloudinaryUploadOptions(file.originalname)
+    );
+
+    // Supprimer l'ancien fichier Cloudinary une fois le nouveau uploadé avec succès
+    if (oldData.publicId) {
+      await cloudinary.uploader.destroy(oldData.publicId).catch(err =>
+        console.error('⚠️ Impossible de supprimer l\'ancien fichier Cloudinary:', err.message)
+      );
+    }
+
+    await db.collection('contents').doc(id).update({
+      url: result.secure_url,
+      publicId: result.public_id,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.json({ message: 'Fichier remplacé avec succès', url: result.secure_url });
+  } catch (error) {
+    console.error('Erreur remplacement fichier:', error);
+    res.status(500).json({ error: 'Erreur lors du remplacement du fichier' });
   }
 });
 
@@ -80,11 +224,17 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
 // ============================================================
 // 4. ACHETER UN CONTENU PAYANT (via FedaPay) - VERSION CORRIGÉE
 // ============================================================
-router.post('/purchase', async (req, res) => {
+router.post('/purchase', paymentLimiter, async (req, res) => {
   const { contentId, customerName, customerEmail } = req.body;
 
   if (!contentId) {
     return res.status(400).json({ error: 'ID du contenu requis' });
+  }
+
+  // ✅ L'email est désormais obligatoire : c'est la seule façon pour le client
+  // de retrouver plus tard son achat via "Retrouver mes achats".
+  if (!customerEmail || !customerEmail.includes('@')) {
+    return res.status(400).json({ error: 'Un email valide est requis pour recevoir l\'accès à votre achat' });
   }
 
   try {
@@ -149,6 +299,7 @@ router.post('/purchase', async (req, res) => {
     await db.collection('transactions').doc(transactionId).set({
       contentId: contentId,
       contentTitle: content.title,
+      customerEmail: (customerEmail || '').trim().toLowerCase(),
       amount: amount,
       status: transaction.status || 'pending',
       fedapayTransaction: transaction,
