@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -31,10 +31,22 @@
                 <div class="kpi-card"><span>Transactions</span><span id="kpiTransactions">0</span></div>
                 <div class="kpi-card"><span>Réservations en attente</span><span id="kpiPending">0</span></div>
             </div>
-            <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+
+            <h3 style="margin-top:2rem;">📊 Suivi des tâches</h3>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Une tâche "acceptée" est une réservation payée que vous avez validée. Une fois réalisée,
+                marquez-la "Traitée" depuis le calendrier — elle compte alors dans le taux de réalisation.
+            </p>
+            <div id="taskKpiContainer" class="kpi-grid">
+                <div class="kpi-card"><span>Tâches acceptées</span><span id="kpiAccepted">0</span></div>
+                <div class="kpi-card"><span>Tâches traitées</span><span id="kpiCompleted">0</span></div>
+                <div class="kpi-card"><span>Taux de réalisation</span><span id="kpiCompletionRate">0%</span></div>
+            </div>
+
+            <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap; margin-top:2rem;">
                 <h3 style="margin:0;">Liste des réservations</h3>
                 <div style="display:flex; gap:0.5rem;">
-                    <button id="filterPaid" class="btn btn-sm btn-primary" style="background:#1f9a6e;">Payées</button>
+                    <button id="filterPaid" class="btn btn-sm btn-primary" style="background:#1f9a6e;">À traiter (payées)</button>
                     <button id="filterAll" class="btn btn-sm btn-outline">Toutes</button>
                 </div>
                 <span id="filterStatus" style="font-size:0.8rem; color:#4d6f94;">Affichage : Payées uniquement</span>

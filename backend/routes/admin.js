@@ -25,20 +25,33 @@ router.get('/kpi', verifyToken, isAdmin, async (req, res) => {
     });
 
     const resSnap = await db.collection('reservations').get();
-    let pending = 0, paid = 0, confirmed = 0, cancelled = 0;
+    let pending = 0, paid = 0, confirmed = 0, cancelled = 0, completed = 0;
     resSnap.forEach(doc => {
       const status = doc.data().status || 'pending';
       if (status === 'pending') pending++;
       else if (status === 'paid') paid++;
       else if (status === 'confirmed') confirmed++;
       else if (status === 'cancelled') cancelled++;
+      else if (status === 'completed') completed++;
     });
+
+    // ✅ Nouveaux indicateurs : tâches acceptées, traitées, et taux de réalisation.
+    // "Acceptées" = confirmées mais pas encore traitées + déjà traitées (cumulé).
+    const totalAccepted = confirmed + completed;
+    const completionRate = totalAccepted > 0
+      ? ((completed / totalAccepted) * 100).toFixed(1)
+      : '0.0';
 
     res.json({
       totalServices,
       totalRevenue: totalRevenue.toFixed(2),
       totalTransactions,
-      reservations: { pending, paid, confirmed, cancelled },
+      reservations: { pending, paid, confirmed, cancelled, completed },
+      taskStats: {
+        accepted: totalAccepted,
+        completed: completed,
+        completionRate: completionRate, // en %
+      },
     });
   } catch (error) {
     console.error('❌ Erreur KPI:', error);
@@ -57,9 +70,12 @@ router.get('/reservations/export', verifyToken, isAdmin, async (req, res) => {
 
     let query = db.collection('reservations').orderBy('createdAt', 'desc');
 
-    // ✅ Le filtre est maintenant réellement appliqué : par défaut on ne
-    // renvoie que les réservations payées ; ?filter=all renvoie tout.
-    if (filter !== 'all') {
+    // ✅ 3 modes : "paid" (défaut, réservations payées à trier),
+    // "confirmed" (acceptées, en attente de traitement — vue calendrier),
+    // "all" (tout, y compris annulées/traitées — vue d'audit complète).
+    if (filter === 'confirmed') {
+      query = query.where('status', '==', 'confirmed');
+    } else if (filter !== 'all') {
       query = query.where('status', '==', 'paid');
     }
 
@@ -97,7 +113,9 @@ router.put('/reservations/:id/status', verifyToken, isAdmin, async (req, res) =>
   const { id } = req.params;
   const { status } = req.body;
 
-  if (!['confirmed', 'cancelled'].includes(status)) {
+  // ✅ "completed" = tâche traitée (utilisé depuis le calendrier),
+  // en plus de "confirmed"/"cancelled" (accepter/refuser, depuis le dashboard KPI).
+  if (!['confirmed', 'cancelled', 'completed'].includes(status)) {
     return res.status(400).json({ error: 'Statut invalide' });
   }
 
@@ -115,6 +133,16 @@ router.put('/reservations/:id/status', verifyToken, isAdmin, async (req, res) =>
       status: status,
       updatedAt: new Date().toISOString()
     });
+
+    // ✅ Le message WhatsApp de notification client ne concerne que
+    // l'acceptation/le refus, pas le passage à "traité" (usage interne).
+    if (status === 'completed') {
+      return res.json({
+        success: true,
+        message: 'Réservation marquée comme traitée',
+        status: status,
+      });
+    }
 
     const statusText = status === 'confirmed' ? 'confirmée ✅' : 'annulée ❌';
     const message = `

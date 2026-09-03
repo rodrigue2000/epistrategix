@@ -80,6 +80,11 @@
         function toDownloadUrl(url) {
             if (!url || !url.includes('/upload/')) return url;
             if (url.includes('fl_attachment')) return url; // déjà présent
+            // Cloudinary ne supporte pas les transformations (dont fl_attachment)
+            // sur les fichiers "raw" (Word, Excel, PowerPoint, ZIP) : les insérer
+            // casserait l'URL. Ces fichiers ne s'affichent de toute façon jamais
+            // inline dans le navigateur, ils se téléchargent déjà naturellement.
+            if (url.includes('/raw/upload/')) return url;
             return url.replace('/upload/', '/upload/fl_attachment/');
         }
 

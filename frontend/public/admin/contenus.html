@@ -24,17 +24,19 @@
 
     <main>
         <div class="container">
-            <h2>📁 Catégories (dossiers de contenu)</h2>
-            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
-                Ex: Finance, Marketing... Un contenu ou un pack peut appartenir à plusieurs catégories.
+            <h2>📁 Dossiers de contenu</h2>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1.2rem;">
+                Regroupe tes contenus et packs par thème (ex: Finance, Marketing). Un même contenu peut
+                appartenir à plusieurs dossiers. Clique sur un dossier pour voir, ajouter ou retirer des éléments
+                — retirer un élément d'un dossier ne le supprime jamais, il reste disponible ailleurs.
             </p>
-            <form id="categoryForm" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
-                <input type="text" id="categoryName" placeholder="Nom de la catégorie" required style="flex:1; min-width:200px;">
+            <form id="categoryForm" style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+                <input type="text" id="categoryName" placeholder="Nom du nouveau dossier" required style="flex:1; min-width:200px; padding:0.6rem 0.9rem; border-radius:12px; border:1px solid #dce7f5;">
                 <button type="submit" class="btn btn-secondary">
-                    <i class="fas fa-plus"></i> Ajouter
+                    <i class="fas fa-folder-plus"></i> Créer le dossier
                 </button>
             </form>
-            <div id="categoriesList" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:2rem;"></div>
+            <div id="folderGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1rem; margin-bottom:2.5rem;"></div>
 
             <h2>Uploader un nouveau contenu</h2>
             <form id="contentForm" enctype="multipart/form-data" style="max-width:100%;">
@@ -147,6 +149,43 @@
         </div>
     </main>
 
+    <!-- MODALE DE DÉTAIL D'UN DOSSIER -->
+    <div id="folderDetailModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:1.5rem; padding:0; max-width:600px; width:92%; max-height:85vh; overflow:hidden; box-shadow:0 24px 70px rgba(10,38,71,0.35); display:flex; flex-direction:column;">
+            <div id="folderDetailHeader" style="padding:1.5rem 1.75rem; display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:0.8rem;">
+                    <div id="folderDetailIcon" style="width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class="fas fa-folder-open" style="color:white; font-size:1.3rem;"></i>
+                    </div>
+                    <div>
+                        <h3 id="folderDetailName" style="margin:0; color:#0a2647;">Dossier</h3>
+                        <p id="folderDetailCount" style="margin:0; color:#7b95b5; font-size:0.85rem;">0 élément</p>
+                    </div>
+                </div>
+                <button onclick="closeFolderDetailModal()" style="background:none; border:none; font-size:1.3rem; color:#7b95b5; cursor:pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div style="overflow-y:auto; padding:0 1.75rem 1.75rem; flex:1;">
+                <h4 style="color:#0a2647; font-size:0.95rem; margin-bottom:0.6rem;">Dans ce dossier</h4>
+                <div id="folderItemsInside" style="margin-bottom:1.5rem;"></div>
+
+                <h4 style="color:#0a2647; font-size:0.95rem; margin-bottom:0.6rem;">Ajouter au dossier</h4>
+                <div id="folderItemsOutside" style="max-height:200px; overflow-y:auto; border:1px solid #e2ebf6; border-radius:1rem; padding:0.6rem;"></div>
+                <button id="addSelectedToFolderBtn" class="btn btn-primary btn-sm" style="margin-top:0.8rem;">
+                    <i class="fas fa-plus"></i> Ajouter la sélection
+                </button>
+            </div>
+
+            <div style="padding:1rem 1.75rem; border-top:1px solid #e2ebf6; display:flex; justify-content:flex-end;">
+                <button id="deleteFolderBtn" class="btn btn-danger btn-sm">
+                    <i class="fas fa-trash-alt"></i> Supprimer ce dossier
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODALE D'ÉDITION D'UN CONTENU -->
     <div id="editContentModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
         <div style="background:white; border-radius:2rem; padding:2rem; max-width:500px; width:90%; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
@@ -230,14 +269,26 @@
         };
 
         let allCategories = [];
+        let currentFolderId = null;
+
+        // ✅ Palette d'accents assignée automatiquement à chaque dossier selon son nom,
+        // pour les distinguer visuellement sans configuration manuelle.
+        const FOLDER_ACCENTS = ['#3d5a9c', '#2f8f7c', '#a5673f', '#7d5ba6', '#3d7ea6', '#a15c8f'];
+
+        function folderAccent(name) {
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+            return FOLDER_ACCENTS[hash % FOLDER_ACCENTS.length];
+        }
 
         firebase.auth().onAuthStateChanged(async (user) => {
             if (!user) return;
             const token = await user.getIdToken();
             await loadCategories(token);
-            loadContents(token);
+            await loadContents(token);
             loadBundleChecklist();
-            loadBundles(token);
+            await loadBundles(token);
+            renderFolderGrid();
         });
 
         // Afficher/masquer le champ prix
@@ -249,13 +300,13 @@
         });
 
         // ================================================================
-        // CATÉGORIES (dossiers de contenu)
+        // DOSSIERS DE CONTENU
         // ================================================================
         async function loadCategories(token) {
             try {
                 const response = await fetch(`${API_URL}/api/categories`);
                 allCategories = await response.json();
-                renderCategoriesList(token);
+                renderFolderGrid();
                 renderCategoryChecklist('contentCategoryChecklist');
                 renderCategoryChecklist('bundleCategoryChecklist');
             } catch (error) {
@@ -263,24 +314,44 @@
             }
         }
 
-        function renderCategoriesList(token) {
-            const container = document.getElementById('categoriesList');
+        function countItemsInFolder(catId) {
+            const contentCount = allContentsAdmin.filter(c => (c.categoryIds || []).includes(catId)).length;
+            const bundleCount = allBundlesAdmin.filter(b => (b.categoryIds || []).includes(catId)).length;
+            return contentCount + bundleCount;
+        }
+
+        function renderFolderGrid() {
+            const container = document.getElementById('folderGrid');
             if (allCategories.length === 0) {
-                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée.</p>';
+                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem; grid-column:1/-1;">Aucun dossier créé pour le moment.</p>';
                 return;
             }
-            container.innerHTML = allCategories.map(cat => `
-                <span style="background:#eef4ff; color:#1e5fb0; padding:0.4rem 0.9rem; border-radius:40px; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.5rem;">
-                    ${escapeHtmlSimple(cat.name)}
-                    <i class="fas fa-times" style="cursor:pointer; color:#c73b3b;" onclick="deleteCategory('${cat.id}')"></i>
-                </span>
-            `).join('');
+
+            container.innerHTML = allCategories.map(cat => {
+                const accent = folderAccent(cat.name);
+                const count = countItemsInFolder(cat.id);
+                return `
+                    <div onclick="openFolderDetail('${cat.id}')" style="background:white; border:1px solid #e2ebf6; border-left:4px solid ${accent}; border-radius:1rem; padding:1.1rem; cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;"
+                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 20px rgba(10,38,71,0.08)';"
+                         onmouseout="this.style.transform='none'; this.style.boxShadow='none';">
+                        <div style="display:flex; align-items:center; gap:0.7rem;">
+                            <div style="width:36px; height:36px; border-radius:10px; background:${accent}; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <i class="fas fa-folder" style="color:white; font-size:1rem;"></i>
+                            </div>
+                            <div style="min-width:0;">
+                                <strong style="color:#0a2647; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlSimple(cat.name)}</strong>
+                                <span style="color:#7b95b5; font-size:0.8rem;">${count} élément${count !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderCategoryChecklist(containerId) {
             const container = document.getElementById(containerId);
             if (allCategories.length === 0) {
-                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucune catégorie créée pour le moment.</p>';
+                container.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Aucun dossier créé pour le moment.</p>';
                 return;
             }
             container.innerHTML = allCategories.map(cat => `
@@ -315,27 +386,161 @@
             }
         });
 
-        window.deleteCategory = async function(id) {
+        // ================================================================
+        // DÉTAIL D'UN DOSSIER : voir / ajouter / retirer des éléments
+        // ================================================================
+        window.openFolderDetail = function(catId) {
+            currentFolderId = catId;
+            const cat = allCategories.find(c => c.id === catId);
+            if (!cat) return;
+
+            const accent = folderAccent(cat.name);
+            document.getElementById('folderDetailIcon').style.background = accent;
+            document.getElementById('folderDetailName').textContent = cat.name;
+
+            renderFolderDetailBody();
+            document.getElementById('folderDetailModal').style.display = 'flex';
+        };
+
+        function renderFolderDetailBody() {
+            const catId = currentFolderId;
+
+            const insideContents = allContentsAdmin.filter(c => (c.categoryIds || []).includes(catId));
+            const insideBundles = allBundlesAdmin.filter(b => (b.categoryIds || []).includes(catId));
+            const outsideContents = allContentsAdmin.filter(c => !(c.categoryIds || []).includes(catId));
+
+            document.getElementById('folderDetailCount').textContent =
+                `${insideContents.length + insideBundles.length} élément${(insideContents.length + insideBundles.length) !== 1 ? 's' : ''}`;
+
+            const insideContainer = document.getElementById('folderItemsInside');
+            if (insideContents.length === 0 && insideBundles.length === 0) {
+                insideContainer.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Ce dossier est vide pour l\'instant.</p>';
+            } else {
+                insideContainer.innerHTML = [
+                    ...insideContents.map(c => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.7rem; border-bottom:1px solid #f0f4fa;">
+                            <span>${escapeHtmlSimple(c.title)}</span>
+                            <button onclick="removeFromFolder('${c.id}', 'content')" class="btn btn-outline btn-sm">
+                                <i class="fas fa-times"></i> Retirer
+                            </button>
+                        </div>
+                    `),
+                    ...insideBundles.map(b => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.7rem; border-bottom:1px solid #f0f4fa;">
+                            <span>📦 ${escapeHtmlSimple(b.title)} <span style="color:#7b95b5; font-size:0.75rem;">(pack)</span></span>
+                            <button onclick="removeFromFolder('${b.id}', 'bundle')" class="btn btn-outline btn-sm">
+                                <i class="fas fa-times"></i> Retirer
+                            </button>
+                        </div>
+                    `)
+                ].join('');
+            }
+
+            const outsideContainer = document.getElementById('folderItemsOutside');
+            if (outsideContents.length === 0) {
+                outsideContainer.innerHTML = '<p style="color:#4d6f94; font-size:0.85rem;">Tous les contenus sont déjà dans ce dossier.</p>';
+            } else {
+                outsideContainer.innerHTML = outsideContents.map(c => `
+                    <label style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; cursor:pointer;">
+                        <input type="checkbox" value="${c.id}" class="folder-add-checkbox">
+                        <span>${escapeHtmlSimple(c.title)}</span>
+                    </label>
+                `).join('');
+            }
+        }
+
+        function closeFolderDetailModal() {
+            document.getElementById('folderDetailModal').style.display = 'none';
+            currentFolderId = null;
+        }
+
+        window.removeFromFolder = async function(itemId, type) {
             const user = firebase.auth().currentUser;
             if (!user) return;
-            if (!confirm('Supprimer cette catégorie ? Les contenus qui y étaient rattachés redeviendront non classés.')) return;
+
+            const list = type === 'bundle' ? allBundlesAdmin : allContentsAdmin;
+            const item = list.find(i => i.id === itemId);
+            if (!item) return;
+
+            const newCategoryIds = (item.categoryIds || []).filter(id => id !== currentFolderId);
 
             try {
                 const token = await user.getIdToken();
-                await fetch(`${API_URL}/api/categories/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                const endpoint = type === 'bundle' ? `${API_URL}/api/bundles/${itemId}` : `${API_URL}/api/contents/${itemId}`;
+                const response = await fetch(endpoint, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ categoryIds: newCategoryIds })
                 });
-                loadCategories(token);
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                item.categoryIds = newCategoryIds; // mise à jour locale immédiate
+                renderFolderDetailBody();
+                renderFolderGrid();
             } catch (error) {
                 alert('Erreur: ' + error.message);
             }
         };
 
+        document.getElementById('addSelectedToFolderBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const selectedIds = Array.from(document.querySelectorAll('.folder-add-checkbox:checked')).map(cb => cb.value);
+            if (selectedIds.length === 0) {
+                alert('Sélectionne au moins un contenu à ajouter');
+                return;
+            }
+
+            try {
+                const token = await user.getIdToken();
+                for (const contentId of selectedIds) {
+                    const content = allContentsAdmin.find(c => c.id === contentId);
+                    if (!content) continue;
+                    const newCategoryIds = [...new Set([...(content.categoryIds || []), currentFolderId])];
+
+                    const response = await fetch(`${API_URL}/api/contents/${contentId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ categoryIds: newCategoryIds })
+                    });
+                    if (!response.ok) throw new Error((await response.json()).error);
+                    content.categoryIds = newCategoryIds; // mise à jour locale immédiate
+                }
+
+                renderFolderDetailBody();
+                renderFolderGrid();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        document.getElementById('deleteFolderBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user || !currentFolderId) return;
+            if (!confirm('Supprimer ce dossier ? Les contenus qui y étaient rattachés redeviendront non classés (ils ne seront pas supprimés).')) return;
+
+            try {
+                const token = await user.getIdToken();
+                await fetch(`${API_URL}/api/categories/${currentFolderId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                closeFolderDetailModal();
+                loadCategories(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        let allContentsAdmin = [];
+
         async function loadContents(token) {
             try {
                 const response = await fetch(`${API_URL}/api/contents`);
                 const contents = await response.json();
+                allContentsAdmin = contents;
+                renderFolderGrid();
                 const container = document.getElementById('contentsList');
 
                 if (contents.length === 0) {
@@ -520,10 +725,14 @@
             return String(text).replace(/[&<>"']/g, m => map[m]);
         }
 
+        let allBundlesAdmin = [];
+
         async function loadBundles(token) {
             try {
                 const response = await fetch(`${API_URL}/api/bundles`);
                 const bundles = await response.json();
+                allBundlesAdmin = bundles;
+                renderFolderGrid();
                 const container = document.getElementById('bundlesList');
 
                 if (bundles.length === 0) {

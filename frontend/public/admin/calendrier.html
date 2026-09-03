@@ -29,6 +29,12 @@
             
             <div style="background:white; border-radius:1.5rem; padding:1.5rem; border:1px solid #e2ebf6; margin-bottom:2rem;">
                 <h3>🔒 Blocage manuel d'une plage horaire</h3>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+                    <span style="color:#4d6f94; font-size:0.85rem; align-self:center;">Raccourcis :</span>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('08:00','12:00')">Matinée (8h-12h)</button>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('13:00','18:00')">Après-midi (13h-18h)</button>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('08:00','18:00')">Journée complète</button>
+                </div>
                 <form id="blockForm" style="max-width:100%; padding:1rem 0;">
                     <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
                         <div class="form-group" style="flex:1; min-width:150px;">
@@ -37,11 +43,11 @@
                         </div>
                         <div class="form-group" style="flex:1; min-width:130px;">
                             <label>⏰ Début</label>
-                            <input type="time" id="blockStartTime" required step="900">
+                            <input type="time" id="blockStartTime" required step="1800">
                         </div>
                         <div class="form-group" style="flex:1; min-width:130px;">
                             <label>⏰ Fin</label>
-                            <input type="time" id="blockEndTime" required step="900">
+                            <input type="time" id="blockEndTime" required step="1800">
                         </div>
                         <div class="form-group" style="flex:1; min-width:150px;">
                             <label>📝 Motif</label>
@@ -62,7 +68,11 @@
                 </div>
             </div>
 
-            <h3>📋 Réservations à venir</h3>
+            <h3>📋 Réservations à traiter</h3>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Seules les réservations payées et acceptées (côté KPI) apparaissent ici.
+                Une fois marquées "Traitée", elles disparaissent de cette liste.
+            </p>
             <div id="reservationsList"></div>
         </div>
     </main>
@@ -72,6 +82,14 @@
         // ================================================================
         // CODE SPÉCIFIQUE CALENDRIER
         // ================================================================
+
+        // ================================================================
+        // RACCOURCIS DE BLOCAGE RAPIDE
+        // ================================================================
+        window.applyPreset = function(start, end) {
+            document.getElementById('blockStartTime').value = start;
+            document.getElementById('blockEndTime').value = end;
+        };
 
         // ================================================================
         // AUTHENTIFICATION
@@ -91,14 +109,16 @@
         // ================================================================
         async function loadReservations(token) {
             try {
-                const response = await fetch(`${API_URL}/api/admin/reservations/export?filter=all`, {
+                // ✅ Le calendrier ne montre que les réservations payées ET acceptées
+                // (l'acceptation/refus se fait désormais uniquement au niveau du dashboard KPI)
+                const response = await fetch(`${API_URL}/api/admin/reservations/export?filter=confirmed`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const reservations = await response.json();
                 const container = document.getElementById('reservationsList');
 
                 if (reservations.length === 0) {
-                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucune réservation.</p>';
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucune réservation à traiter.</p>';
                     return;
                 }
 
@@ -110,23 +130,11 @@
                                 ${r.date} à ${r.time}
                             </span>
                             ${r.durationMinutes ? `<span style="color:#4d6f94; font-size:0.9rem; margin-left:0.5rem;">(${r.durationMinutes} min)</span>` : ''}
-                            <span style="margin-left:1rem; padding:0.2rem 0.8rem; border-radius:40px; font-size:0.75rem; font-weight:600; background:${r.status === 'paid' ? '#d4edda' : r.status === 'pending' ? '#fff3cd' : r.status === 'confirmed' ? '#cce5ff' : '#f8d7da'}; color:${r.status === 'paid' ? '#155724' : r.status === 'pending' ? '#856404' : r.status === 'confirmed' ? '#004085' : '#721c24'};">
-                                ${r.status}
-                            </span>
                         </div>
                         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                            ${r.status !== 'confirmed' && r.status !== 'cancelled' ? `
-                                <button onclick="updateStatus('${r.id}', 'confirmed')" class="btn btn-success btn-sm">
-                                    <i class="fas fa-check"></i> Confirmer
-                                </button>
-                                <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-danger btn-sm">
-                                    <i class="fas fa-times"></i> Annuler
-                                </button>
-                            ` : `
-                                <span style="padding:0.3rem 0.8rem; border-radius:40px; font-size:0.75rem; background:#e9ecef; color:#6c757d;">
-                                    ${r.status === 'confirmed' ? '✅ Confirmé' : '❌ Annulé'}
-                                </span>
-                            `}
+                            <button onclick="markAsCompleted('${r.id}')" class="btn btn-primary btn-sm">
+                                <i class="fas fa-check-double"></i> Traiter
+                            </button>
                         </div>
                     </div>
                 `).join('');
@@ -136,11 +144,13 @@
         }
 
         // ================================================================
-        // METTRE À JOUR LE STATUT D'UNE RÉSERVATION
+        // MARQUER UNE RÉSERVATION COMME TRAITÉE
         // ================================================================
-        window.updateStatus = async function(id, status) {
+        window.markAsCompleted = async function(id) {
             const user = firebase.auth().currentUser;
             if (!user) return;
+
+            if (!confirm('Marquer cette réservation comme traitée ? Elle disparaîtra de cette liste.')) return;
 
             try {
                 const token = await user.getIdToken();
@@ -150,7 +160,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ status })
+                    body: JSON.stringify({ status: 'completed' })
                 });
 
                 if (!response.ok) {
@@ -158,14 +168,7 @@
                     throw new Error(error.error || 'Erreur lors de la mise à jour');
                 }
 
-                const data = await response.json();
-                
-                if (status === 'confirmed' || status === 'cancelled') {
-                    await openWhatsAppModal(id, status);
-                }
-                
                 loadReservations(token);
-
             } catch (error) {
                 alert('❌ Erreur: ' + error.message);
             }
