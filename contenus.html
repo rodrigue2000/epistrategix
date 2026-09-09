@@ -17,7 +17,6 @@
                 <a href="services.html">Services</a>
                 <a href="calendrier.html">Calendrier</a>
                 <a href="contenus.html">Contenus</a>
-                <a href="sessions-admin.html">Formations</a>
                 <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
             </nav>
         </div>
@@ -88,20 +87,8 @@
                     </select>
                 </div>
                 <div class="form-group" id="priceField">
-                    <label id="contentPriceLabel">Prix (FCFA) - pour contenu payant</label>
+                    <label>Prix (FCFA) - pour contenu payant</label>
                     <input type="number" id="contentPrice" placeholder="0" step="1" min="0">
-
-                    <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
-                        <input type="checkbox" id="contentPromoEnabled">
-                        <span>Ce contenu est en promotion</span>
-                    </label>
-                    <div id="contentPromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
-                        <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
-                            ⚠️ Le champ <strong>"Prix"</strong> ci-dessus est celui <strong>réellement facturé</strong> au client. Renseigne ici le prix d'origine, affiché barré.
-                        </p>
-                        <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
-                        <input type="number" id="contentOriginalPrice" placeholder="0" step="1" min="0">
-                    </div>
                 </div>
                 <div class="form-group">
                     <label>Fichier</label>
@@ -137,20 +124,8 @@
                     <input type="text" id="bundleDescription" placeholder="Courte description du pack">
                 </div>
                 <div class="form-group">
-                    <label id="bundlePriceLabel">Prix (FCFA)</label>
+                    <label>Prix (FCFA)</label>
                     <input type="number" id="bundlePrice" required placeholder="0" step="1" min="1">
-
-                    <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
-                        <input type="checkbox" id="bundlePromoEnabled">
-                        <span>Ce pack est en promotion</span>
-                    </label>
-                    <div id="bundlePromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
-                        <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
-                            ⚠️ Le champ <strong>"Prix"</strong> ci-dessus est celui <strong>réellement facturé</strong> au client. Renseigne ici le prix d'origine, affiché barré.
-                        </p>
-                        <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
-                        <input type="number" id="bundleOriginalPrice" placeholder="0" step="1" min="0">
-                    </div>
                 </div>
                 <div class="form-group">
                     <label>Contenus à inclure (coche au moins 2)</label>
@@ -254,20 +229,8 @@
                 </select>
             </div>
             <div class="form-group" id="editPriceField">
-                <label id="editContentPriceLabel">Prix (FCFA)</label>
+                <label>Prix (FCFA)</label>
                 <input type="number" id="editContentPrice" min="0" step="1">
-
-                <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
-                    <input type="checkbox" id="editContentPromoEnabled">
-                    <span>Ce contenu est en promotion</span>
-                </label>
-                <div id="editContentPromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
-                    <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
-                        ⚠️ Le champ <strong>"Prix"</strong> ci-dessus est celui <strong>réellement facturé</strong> au client. Renseigne ici le prix d'origine, affiché barré.
-                    </p>
-                    <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
-                    <input type="number" id="editContentOriginalPrice" min="0" step="1">
-                </div>
             </div>
             <div style="display:flex; gap:0.6rem; margin-top:1rem;">
                 <button id="saveContentEditBtn" class="btn btn-primary" style="flex:1; justify-content:center;">
@@ -334,25 +297,6 @@
         });
         document.getElementById('editContentPriceType').addEventListener('change', function() {
             document.getElementById('editPriceField').style.display = this.value === 'paid' ? 'block' : 'none';
-        });
-
-        document.getElementById('contentPromoEnabled').addEventListener('change', function() {
-            document.getElementById('contentPromoFields').style.display = this.checked ? 'block' : 'none';
-            document.getElementById('contentPriceLabel').textContent = this.checked
-                ? 'Prix ACTUEL, facturé au client (FCFA)'
-                : 'Prix (FCFA) - pour contenu payant';
-        });
-        document.getElementById('editContentPromoEnabled').addEventListener('change', function() {
-            document.getElementById('editContentPromoFields').style.display = this.checked ? 'block' : 'none';
-            document.getElementById('editContentPriceLabel').textContent = this.checked
-                ? 'Prix ACTUEL, facturé au client (FCFA)'
-                : 'Prix (FCFA)';
-        });
-        document.getElementById('bundlePromoEnabled').addEventListener('change', function() {
-            document.getElementById('bundlePromoFields').style.display = this.checked ? 'block' : 'none';
-            document.getElementById('bundlePriceLabel').textContent = this.checked
-                ? 'Prix ACTUEL, facturé au client (FCFA)'
-                : 'Prix (FCFA)';
         });
 
         // ================================================================
@@ -610,7 +554,7 @@
                             <strong>${c.title}</strong>
                             ${c.solutionType ? `<span style="background:#eef4ff; color:#1e5fb0; font-size:0.75rem; padding:0.15rem 0.6rem; border-radius:40px; margin-left:0.6rem;">${SOLUTION_TYPE_LABELS[c.solutionType] || c.solutionType}</span>` : ''}
                             <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">
-                                ${c.priceType === 'free' ? '📄 Gratuit' : (c.promoEnabled ? `<span style="text-decoration:line-through; color:#7b95b5;">${c.originalPrice} FCFA</span> <strong style="color:#c73b3b;">${c.price} FCFA</strong>` : '💰 ' + c.price + ' FCFA')}
+                                ${c.priceType === 'free' ? '📄 Gratuit' : '💰 ' + c.price + ' FCFA'}
                             </span>
                             <a href="${c.url}" target="_blank" style="margin-left:1rem; color:#1e5fb0;">
                                 <i class="fas fa-external-link-alt"></i>
@@ -655,13 +599,6 @@
                 return;
             }
 
-            const promoEnabled = document.getElementById('contentPromoEnabled').checked;
-            const originalPrice = parseFloat(document.getElementById('contentOriginalPrice').value);
-            if (priceType === 'paid' && promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
-                alert('Le prix normal doit être supérieur au prix promo');
-                return;
-            }
-
             const formData = new FormData();
             formData.append('title', title);
             formData.append('description', description);
@@ -670,8 +607,6 @@
             formData.append('solutionType', solutionType);
             formData.append('priceType', priceType);
             formData.append('price', price);
-            formData.append('promoEnabled', priceType === 'paid' && promoEnabled ? 'true' : 'false');
-            formData.append('originalPrice', priceType === 'paid' && promoEnabled ? originalPrice : '');
             formData.append('file', file);
 
             const selectedCategoryIds = Array.from(document.querySelectorAll('.contentCategoryChecklist-checkbox:checked')).map(cb => cb.value);
@@ -810,7 +745,7 @@
                         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
                             <div>
                                 <strong>📦 ${escapeHtmlSimple(b.title)}</strong>
-                                <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">${b.promoEnabled ? `<span style="text-decoration:line-through; color:#7b95b5;">${b.originalPrice} FCFA</span> <strong style="color:#c73b3b;">${b.price} FCFA</strong>` : '💰 ' + b.price + ' FCFA'}</span>
+                                <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">💰 ${b.price} FCFA</span>
                                 <span style="color:#4d6f94; font-size:0.85rem; margin-left:1rem;">${(b.items || []).length} contenu(s)</span>
                             </div>
                             <button onclick="deleteBundle('${b.id}')" class="btn btn-danger btn-sm">
@@ -847,13 +782,6 @@
                 return;
             }
 
-            const promoEnabled = document.getElementById('bundlePromoEnabled').checked;
-            const originalPrice = parseFloat(document.getElementById('bundleOriginalPrice').value);
-            if (promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
-                alert('Le prix normal doit être supérieur au prix promo');
-                return;
-            }
-
             const submitBtn = document.querySelector('#bundleForm button[type="submit"]');
             const originalHtml = submitBtn.innerHTML;
             submitBtn.disabled = true;
@@ -869,9 +797,7 @@
                     },
                     body: JSON.stringify({
                         title, description, priceType: 'paid', price, contentIds,
-                        categoryIds: Array.from(document.querySelectorAll('.bundleCategoryChecklist-checkbox:checked')).map(cb => cb.value),
-                        promoEnabled,
-                        originalPrice: promoEnabled ? originalPrice : null,
+                        categoryIds: Array.from(document.querySelectorAll('.bundleCategoryChecklist-checkbox:checked')).map(cb => cb.value)
                     })
                 });
 
@@ -925,9 +851,6 @@
             document.getElementById('editContentSolutionType').value = content.solutionType || 'autre';
             document.getElementById('editContentPriceType').value = content.priceType || 'free';
             document.getElementById('editContentPrice').value = content.price || 0;
-            document.getElementById('editContentPromoEnabled').checked = !!content.promoEnabled;
-            document.getElementById('editContentOriginalPrice').value = content.originalPrice || 0;
-            document.getElementById('editContentPromoFields').style.display = content.promoEnabled ? 'block' : 'none';
             document.getElementById('editPriceField').style.display = content.priceType === 'paid' ? 'block' : 'none';
 
             // Rendre la checklist de catégories avec les cases déjà cochées pour ce contenu
@@ -963,16 +886,9 @@
             const priceType = document.getElementById('editContentPriceType').value;
             const price = parseFloat(document.getElementById('editContentPrice').value);
             const categoryIds = Array.from(document.querySelectorAll('.editContentCategoryChecklist-checkbox:checked')).map(cb => cb.value);
-            const promoEnabled = document.getElementById('editContentPromoEnabled').checked;
-            const originalPrice = parseFloat(document.getElementById('editContentOriginalPrice').value);
 
             if (!title) {
                 alert('Le titre est requis');
-                return;
-            }
-
-            if (priceType === 'paid' && promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
-                alert('Le prix normal doit être supérieur au prix promo');
                 return;
             }
 
@@ -986,11 +902,7 @@
                 const response = await fetch(`${API_URL}/api/contents/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({
-                        title, description, author, solutionType, priceType, price, categoryIds,
-                        promoEnabled: priceType === 'paid' && promoEnabled,
-                        originalPrice: priceType === 'paid' && promoEnabled ? originalPrice : null,
-                    })
+                    body: JSON.stringify({ title, description, author, solutionType, priceType, price, categoryIds })
                 });
 
                 if (!response.ok) throw new Error((await response.json()).error);

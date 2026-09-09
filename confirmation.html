@@ -15,7 +15,6 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
-                <a href="formations.html">Formations</a>
                 <a href="support.html">Support</a>
                 <a href="admin/dashboard.html" class="btn-admin">Admin</a>
             </nav>
@@ -150,31 +149,6 @@
             `;
         }
 
-        function renderSessionSuccess(data) {
-            container.innerHTML = `
-                <div style="font-size: 5rem; color: #1f9a6e; margin-bottom: 1.5rem;">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <h2 style="font-size: 2rem; margin-bottom: 1rem;">Inscription confirmée !</h2>
-                <p style="font-size: 1.1rem; color: #3e6188; max-width: 500px; margin: 0 auto 1.2rem;">
-                    Vous êtes inscrit(e) à la session <strong>${escapeHtml(data.sessionTitle)}</strong>,
-                    le ${escapeHtml(data.date)} à ${escapeHtml(data.time)}.
-                </p>
-                <div style="background:#fff8e1; border:1px solid #f5deb3; border-radius:1rem; padding:1rem; max-width:500px; margin:0 auto 1.5rem;">
-                    <p style="font-size:0.9rem; color:#8a6d1a; margin:0;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Gardez précieusement ce lien. Le jour J, vous patienterez dans une salle d'attente le temps
-                        que l'hôte valide votre entrée en vérifiant votre nom.
-                    </p>
-                </div>
-                <a href="${data.jitsiUrl}" target="_blank" class="btn btn-success" style="margin-bottom:1.5rem; display:inline-flex; align-items:center; gap:0.5rem;">
-                    <i class="fas fa-video"></i> Lien de la session
-                </a>
-                <br>
-                ${navLinks()}
-            `;
-        }
-
         function renderPending() {
             container.innerHTML = `
                 <div style="font-size: 5rem; color: #e0a800; margin-bottom: 1.5rem;">
@@ -247,29 +221,6 @@
             }
         }
 
-        async function fetchSessionPurchase(id, attemptsLeft = 5) {
-            try {
-                const res = await fetch(`${API_URL}/api/trainings/transaction/${id}`);
-                const data = await res.json();
-
-                if (!res.ok) {
-                    renderError(data.error || 'Impossible de récupérer votre inscription.');
-                    return;
-                }
-
-                if (data.status === 'approved') {
-                    renderSessionSuccess(data);
-                } else if (attemptsLeft > 0) {
-                    renderPending();
-                    setTimeout(() => fetchSessionPurchase(id, attemptsLeft - 1), 2000);
-                } else {
-                    renderError('Le paiement est en cours de vérification. Rafraîchissez cette page dans un instant.');
-                }
-            } catch (err) {
-                renderError('Erreur réseau, veuillez réessayer.');
-            }
-        }
-
         // ================================================================
         // ROUTAGE SELON LES PARAMÈTRES D'URL
         // ================================================================
@@ -277,8 +228,6 @@
             fetchContentPurchase(transactionId);
         } else if (status === 'success' && type === 'bundle' && transactionId) {
             fetchBundlePurchase(transactionId);
-        } else if (status === 'success' && type === 'session' && transactionId) {
-            fetchSessionPurchase(transactionId);
         } else if (status === 'success') {
             renderReservationSuccess();
         } else {

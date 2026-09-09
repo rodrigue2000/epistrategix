@@ -18,7 +18,6 @@
                 <a href="services.html">Services</a>
                 <a href="calendrier.html">Calendrier</a>
                 <a href="contenus.html">Contenus</a>
-                <a href="sessions-admin.html">Formations</a>
                 <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
             </nav>
         </div>
@@ -49,20 +48,8 @@
                     </select>
                 </div>
                 <div class="form-group" id="fixedPriceSection">
-                    <label id="servicePriceLabel">Prix (FCFA) - pour prix fixe uniquement</label>
+                    <label>Prix (FCFA) - pour prix fixe uniquement</label>
                     <input type="number" id="servicePrice" placeholder="0" step="1" min="0">
-
-                    <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
-                        <input type="checkbox" id="servicePromoEnabled">
-                        <span>Ce service est en promotion</span>
-                    </label>
-                    <div id="servicePromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
-                        <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
-                            ⚠️ Le champ <strong>"Prix"</strong> ci-dessus est celui qui sera <strong>réellement facturé</strong> au client (le prix promo). Renseigne ici uniquement le prix d'origine, pour l'afficher barré à titre indicatif.
-                        </p>
-                        <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
-                        <input type="number" id="serviceOriginalPrice" placeholder="0" step="1" min="0">
-                    </div>
                 </div>
                 <div id="unitPriceSection" style="display:none; border:1px solid #dce7f5; border-radius:1rem; padding:1rem; margin-bottom:1rem; background:#f8faff;">
                     <h4 style="color:#0a2647; margin-bottom:0.8rem;">⚡ Tarification à l'unité de temps</h4>
@@ -135,20 +122,8 @@
                 </select>
             </div>
             <div class="form-group" id="editFixedPriceSection">
-                <label id="editServicePriceLabel">Prix (FCFA)</label>
+                <label>Prix (FCFA)</label>
                 <input type="number" id="editServicePrice" step="1" min="0">
-
-                <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
-                    <input type="checkbox" id="editServicePromoEnabled">
-                    <span>Ce service est en promotion</span>
-                </label>
-                <div id="editServicePromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
-                    <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
-                        ⚠️ Le champ <strong>"Prix"</strong> ci-dessus est celui <strong>réellement facturé</strong> au client. Renseigne ici le prix d'origine, affiché barré.
-                    </p>
-                    <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
-                    <input type="number" id="editServiceOriginalPrice" step="1" min="0">
-                </div>
             </div>
             <div id="editUnitPriceSection" style="display:none; border:1px solid #dce7f5; border-radius:1rem; padding:1rem; margin-bottom:1rem; background:#f8faff;">
                 <h4 style="color:#0a2647; margin-bottom:0.8rem;">⚡ Tarification à l'unité de temps</h4>
@@ -208,20 +183,6 @@
             document.getElementById('editUnitPriceSection').style.display = value === 'unit' ? 'block' : 'none';
         });
 
-        document.getElementById('servicePromoEnabled').addEventListener('change', function() {
-            document.getElementById('servicePromoFields').style.display = this.checked ? 'block' : 'none';
-            document.getElementById('servicePriceLabel').textContent = this.checked
-                ? 'Prix ACTUEL, facturé au client (FCFA)'
-                : 'Prix (FCFA) - pour prix fixe uniquement';
-        });
-
-        document.getElementById('editServicePromoEnabled').addEventListener('change', function() {
-            document.getElementById('editServicePromoFields').style.display = this.checked ? 'block' : 'none';
-            document.getElementById('editServicePriceLabel').textContent = this.checked
-                ? 'Prix ACTUEL, facturé au client (FCFA)'
-                : 'Prix (FCFA)';
-        });
-
         let allServices = [];
 
         async function loadServices(token) {
@@ -238,9 +199,7 @@
                 container.innerHTML = allServices.map(s => {
                     let priceDisplay = '';
                     if (s.priceType === 'fixed') {
-                        priceDisplay = s.promoEnabled
-                            ? `<span style="text-decoration:line-through; color:#7b95b5;">${s.originalPrice} FCFA</span> <strong style="color:#c73b3b;">${s.price} FCFA</strong> (fixe)`
-                            : s.price + ' FCFA (fixe)';
+                        priceDisplay = s.price + ' FCFA (fixe)';
                     } else if (s.priceType === 'free') {
                         priceDisplay = 'Gratuit';
                     } else if (s.priceType === 'unit') {
@@ -317,21 +276,6 @@
                     return;
                 }
                 payload.price = price;
-
-                const promoEnabled = document.getElementById('servicePromoEnabled').checked;
-                if (promoEnabled) {
-                    const originalPrice = parseFloat(document.getElementById('serviceOriginalPrice').value);
-                    if (isNaN(originalPrice) || originalPrice <= price) {
-                        errorDiv.textContent = '⚠️ Le prix normal doit être supérieur au prix promo.';
-                        errorDiv.style.display = 'block';
-                        return;
-                    }
-                    payload.promoEnabled = true;
-                    payload.originalPrice = originalPrice;
-                } else {
-                    payload.promoEnabled = false;
-                    payload.originalPrice = null;
-                }
             } else if (priceType === 'unit') {
                 const unitPrice = parseFloat(document.getElementById('unitPrice').value);
                 const durationUnit = parseInt(document.getElementById('durationUnit').value);
@@ -403,9 +347,6 @@
             document.getElementById('editServiceProvider').value = service.provider || '';
             document.getElementById('editPriceType').value = service.priceType || 'fixed';
             document.getElementById('editServicePrice').value = service.price || 0;
-            document.getElementById('editServicePromoEnabled').checked = !!service.promoEnabled;
-            document.getElementById('editServiceOriginalPrice').value = service.originalPrice || 0;
-            document.getElementById('editServicePromoFields').style.display = service.promoEnabled ? 'block' : 'none';
             document.getElementById('editServiceDuration').value = service.duration || 60;
             document.getElementById('editUnitPrice').value = service.unitPrice || 0;
             document.getElementById('editDurationUnit').value = service.durationUnit || 60;
@@ -453,21 +394,6 @@
                     return;
                 }
                 payload.price = price;
-
-                const promoEnabled = document.getElementById('editServicePromoEnabled').checked;
-                if (promoEnabled) {
-                    const originalPrice = parseFloat(document.getElementById('editServiceOriginalPrice').value);
-                    if (isNaN(originalPrice) || originalPrice <= price) {
-                        errorDiv.textContent = '⚠️ Le prix normal doit être supérieur au prix promo.';
-                        errorDiv.style.display = 'block';
-                        return;
-                    }
-                    payload.promoEnabled = true;
-                    payload.originalPrice = originalPrice;
-                } else {
-                    payload.promoEnabled = false;
-                    payload.originalPrice = null;
-                }
             } else if (priceType === 'unit') {
                 const unitPrice = parseFloat(document.getElementById('editUnitPrice').value);
                 const durationUnit = parseInt(document.getElementById('editDurationUnit').value);

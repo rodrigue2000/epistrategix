@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions de formation - EpiStrategix</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
+            <nav>
+                <a href="index.html">Accueil</a>
+                <a href="reservation.html">Réserver</a>
+                <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="formations.html">Formations</a>
+                <a href="support.html">Support</a>
+                <a href="admin/login.html" class="btn-admin">Admin</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>🎓 Sessions de formation en groupe</h2>
+            <p style="color:#3e6188; margin-bottom:1.5rem;">
+                Rejoignez une session de formation en direct, en visioconférence sécurisée.
+            </p>
+            <div id="sessionsList" class="grid">
+                <div style="grid-column:1/-1; text-align:center; padding:2rem; color:#4d6f94;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i>
+                    <p style="margin-top:0.5rem;">Chargement des sessions...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODALE D'INSCRIPTION -->
+    <div id="registerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:2rem; padding:2rem; max-width:480px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="color:#0a2647; margin-bottom:1rem;">
+                <i class="fas fa-user-plus"></i> S'inscrire à la session
+            </h3>
+            <p id="registerSessionTitle" style="font-weight:700; color:#0a2647; margin-bottom:0.3rem;"></p>
+            <p id="registerSessionPrice" style="font-size:1.3rem; font-weight:700; color:#1e5fb0; margin-bottom:1.2rem;"></p>
+
+            <div class="form-group">
+                <label>Votre nom complet</label>
+                <input type="text" id="registerName" required placeholder="Nom et prénom" style="width:100%; padding:0.6rem; border-radius:12px; border:1px solid #dce7f5;">
+            </div>
+            <div class="form-group">
+                <label>Votre email</label>
+                <input type="email" id="registerEmail" required placeholder="vous@exemple.com" style="width:100%; padding:0.6rem; border-radius:12px; border:1px solid #dce7f5;">
+            </div>
+
+            <div style="background:#fff8e1; border:1px solid #f5deb3; border-radius:1rem; padding:1rem; margin:1rem 0;">
+                <p style="font-size:0.85rem; color:#8a6d1a; margin:0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Le jour de la session, vous devrez indiquer <strong>exactement ce même nom</strong> en entrant
+                    dans la salle d'attente — c'est ce qui permet à l'hôte de valider votre entrée.
+                    Aucun remboursement n'est possible après paiement.
+                </p>
+            </div>
+
+            <div style="display:flex; gap:0.8rem; flex-wrap:wrap;">
+                <button id="confirmRegisterBtn" class="btn btn-success" style="flex:1; justify-content:center; padding:0.8rem; min-width:150px;">
+                    <i class="fas fa-check"></i> Je confirme, payer
+                </button>
+                <button onclick="closeRegisterModal()" class="btn btn-outline" style="flex:1; justify-content:center; min-width:100px;">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 EpiStrategix - Tous droits réservés</p>
+            <p style="margin-top:0.5rem; font-size:0.85rem;">
+                <a href="cgu.html">CGU</a> · <a href="confidentialite.html">Confidentialité</a> · <a href="support.html">Support</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+        let currentSessionId = null;
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function formatDate(dateStr, timeStr) {
+            try {
+                const d = new Date(`${dateStr}T${timeStr}`);
+                return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+                    ` à ${timeStr}`;
+            } catch (e) {
+                return `${dateStr} à ${timeStr}`;
+            }
+        }
+
+        fetch(`${API_URL}/api/trainings`)
+            .then(res => res.json())
+            .then(sessions => {
+                const container = document.getElementById('sessionsList');
+                container.innerHTML = '';
+
+                // Ne montrer que les sessions futures
+                const now = new Date();
+                const upcoming = sessions.filter(s => new Date(`${s.date}T${s.time}`) > now);
+
+                if (upcoming.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column:1/-1;">
+                            <i class="fas fa-calendar-times"></i>
+                            <p>Aucune session à venir pour le moment.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                upcoming.forEach(session => {
+                    const card = document.createElement('div');
+                    card.className = 'content-card';
+
+                    const priceHtml = session.priceType === 'free'
+                        ? '📄 Gratuit'
+                        : (session.promoEnabled
+                            ? `<span style="text-decoration:line-through; color:#7b95b5; font-size:0.75em;">${session.originalPrice} FCFA</span> <span style="color:#c73b3b;">${session.price} FCFA</span>`
+                            : `💰 ${session.price} FCFA`);
+
+                    const isFull = session.spotsRemaining <= 0;
+                    const isClosed = session.registrationClosed;
+                    const disabled = isFull || isClosed;
+
+                    card.innerHTML = `
+                        <h3>${escapeHtml(session.title)}</h3>
+                        <p style="color:#4d6f94; font-size:0.9rem;">${formatDate(session.date, session.time)}</p>
+                        ${session.description ? `<p style="color:#3e6188; font-size:0.9rem;">${escapeHtml(session.description)}</p>` : ''}
+                        <p style="color:${isFull ? '#c73b3b' : '#1f9a6e'}; font-size:0.85rem; font-weight:600;">
+                            ${isFull ? 'Complet' : `${session.spotsRemaining} place(s) restante(s) / ${session.maxParticipants}`}
+                        </p>
+                        <p style="font-size:1.2rem; font-weight:700; color:#1e5fb0;">${priceHtml}</p>
+                        <button
+                            class="btn ${disabled ? 'btn-outline' : 'btn-success'}"
+                            style="width:100%; justify-content:center;"
+                            ${disabled ? 'disabled' : ''}
+                            onclick="openRegisterModal('${session.id}', '${escapeHtml(session.title)}', ${session.price})">
+                            <i class="fas fa-user-plus"></i> ${isClosed ? 'Inscriptions closes' : isFull ? 'Complet' : "S'inscrire"}
+                        </button>
+                    `;
+                    container.appendChild(card);
+                });
+            })
+            .catch(err => {
+                console.error('Erreur chargement sessions:', err);
+                document.getElementById('sessionsList').innerHTML = `
+                    <div class="empty-state" style="grid-column:1/-1;">
+                        <i class="fas fa-exclamation-triangle" style="color:#c73b3b;"></i>
+                        <p style="color:#c73b3b;">Erreur de chargement des sessions.</p>
+                    </div>
+                `;
+            });
+
+        function openRegisterModal(sessionId, title, price) {
+            currentSessionId = sessionId;
+            document.getElementById('registerSessionTitle').textContent = title;
+            document.getElementById('registerSessionPrice').textContent = price + ' FCFA';
+            document.getElementById('registerModal').style.display = 'flex';
+        }
+
+        function closeRegisterModal() {
+            document.getElementById('registerModal').style.display = 'none';
+        }
+
+        document.getElementById('confirmRegisterBtn').addEventListener('click', async () => {
+            const name = document.getElementById('registerName').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+
+            if (!name) {
+                alert('Veuillez entrer votre nom complet');
+                return;
+            }
+            if (!email || !email.includes('@')) {
+                alert('Veuillez entrer un email valide');
+                return;
+            }
+
+            const btn = document.getElementById('confirmRegisterBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Redirection en cours...';
+
+            try {
+                const response = await fetch(`${API_URL}/api/trainings/purchase`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: currentSessionId,
+                        customerName: name,
+                        customerEmail: email
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.url) {
+                    alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    return;
+                }
+
+                window.location.href = data.url;
+            } catch (error) {
+                alert('❌ Erreur réseau, veuillez réessayer.');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        });
+    </script>
+</body>
+</html>

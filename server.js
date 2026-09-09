@@ -6,11 +6,6 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 5000;
 
-// ✅ Render (comme la plupart des hébergeurs) place l'app derrière un proxy
-// inverse qui ajoute l'en-tête X-Forwarded-For. Sans ce réglage,
-// express-rate-limit ne peut pas identifier fiablement l'IP réelle du client.
-app.set('trust proxy', 1);
-
 // Middleware CORS (toujours global, ne pose pas de problème)
 app.use(cors());
 
@@ -64,7 +59,6 @@ if (firebaseReady) {
         const bundlesRoutes = require('./routes/bundles');
         const categoriesRoutes = require('./routes/categories');
         const purchasesRoutes = require('./routes/purchases');
-        const trainingsRoutes = require('./routes/trainings');
         const adminRoutes = require('./routes/admin');
         const webhookRoutes = require('./webhooks/fedapay');
 
@@ -75,7 +69,6 @@ if (firebaseReady) {
         app.use('/api/bundles', bundlesRoutes);
         app.use('/api/categories', categoriesRoutes);
         app.use('/api/purchases', purchasesRoutes);
-        app.use('/api/trainings', trainingsRoutes);
         app.use('/api/admin', adminRoutes);
 
         // ✅ Chemin corrigé : "webhooks" au pluriel, pour correspondre

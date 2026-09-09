@@ -31,22 +31,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     // ✅ La transaction se trouve dans event.entity (pas event.data)
     const transaction = event.entity;
     const transactionId = String(transaction.id);
-    const metadata = transaction.custom_metadata || {};
 
     console.log(`📦 Webhook reçu: ${event.name} - Transaction: ${transactionId}`);
-
-    // ✅ IMPORTANT : le même compte FedaPay peut être partagé entre plusieurs
-    // projets (chacun avec son propre webhook enregistré). FedaPay envoie
-    // l'événement à TOUS les webhooks du compte pour CHAQUE transaction,
-    // qu'elle appartienne à ce projet ou non. On ignore donc silencieusement
-    // toute transaction qui ne porte pas les métadonnées propres à EpiStrategix,
-    // au lieu d'essayer de mettre à jour un document Firestore qui n'existe
-    // pas ici (ce qui provoquait une erreur avant ce correctif).
-    const belongsToEpiStrategix = !!(metadata.reservationId || metadata.contentId || metadata.bundleId || metadata.sessionId);
-    if (!belongsToEpiStrategix) {
-      console.log(`ℹ️ Transaction ${transactionId} ignorée — ne concerne pas EpiStrategix (compte FedaPay partagé)`);
-      return res.status(200).json({ received: true, ignored: true });
-    }
 
     if (event.name === 'transaction.approved') {
       // ✅ IDEMPOTENCE : si cette transaction est déjà marquée "approved",
@@ -60,16 +46,16 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
       const amount = transaction.amount;
 
-      // ✅ set(..., { merge: true }) au lieu de update() : reste robuste même
-      // si le document n'existait pas encore pour une raison quelconque,
-      // au lieu de planter avec une erreur Firestore NOT_FOUND.
-      await db.collection('transactions').doc(transactionId).set({
+      // ✅ Mettre à jour la transaction
+      await db.collection('transactions').doc(transactionId).update({
         status: 'approved',
         amount: amount,
         updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      });
       console.log(`✅ Transaction ${transactionId} approuvée - Montant: ${amount}`);
 
+      // ✅ Les données personnalisées sont dans "custom_metadata"
+      const metadata = transaction.custom_metadata || {};
       const reservationId = metadata.reservationId;
 
       // ✅ Pour les réservations
@@ -105,25 +91,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         });
         console.log(`✅ Pack ${metadata.bundleId} acheté`);
       }
-
-      // ✅ Pour les inscriptions à une session de formation
-      if (metadata.contentType === 'session_purchase' && metadata.sessionId) {
-        await db.collection('session_registrations').doc(transactionId).set({
-          sessionId: metadata.sessionId,
-          sessionTitle: metadata.sessionTitle || 'Session',
-          name: metadata.customerName || 'Participant',
-          email: transaction.customer?.email || '',
-          transactionId: transactionId,
-          amount: amount,
-          registeredAt: new Date().toISOString(),
-        });
-        console.log(`✅ Inscription à la session ${metadata.sessionId} confirmée`);
-      }
     } else if (event.name === 'transaction.declined' || event.name === 'transaction.canceled') {
-      await db.collection('transactions').doc(transactionId).set({
+      await db.collection('transactions').doc(transactionId).update({
         status: event.name === 'transaction.canceled' ? 'canceled' : 'declined',
         updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      });
       console.log(`⚠️ Transaction ${transactionId} ${event.name === 'transaction.canceled' ? 'annulée' : 'déclinée'}`);
     }
 

@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 // 2. CRÉER UN PACK (admin uniquement)
 // ============================================================
 router.post('/admin', verifyToken, isAdmin, async (req, res) => {
-  const { title, description, priceType, price, contentIds, categoryIds, promoEnabled, originalPrice } = req.body;
+  const { title, description, priceType, price, contentIds, categoryIds } = req.body;
 
   if (!title || !Array.isArray(contentIds) || contentIds.length < 2) {
     return res.status(400).json({
@@ -52,10 +52,6 @@ router.post('/admin', verifyToken, isAdmin, async (req, res) => {
 
   if (priceType === 'paid' && (!price || price <= 0)) {
     return res.status(400).json({ error: 'Prix requis pour un pack payant' });
-  }
-
-  if (promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
-    return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
   }
 
   try {
@@ -71,13 +67,9 @@ router.post('/admin', verifyToken, isAdmin, async (req, res) => {
       title,
       description: description || '',
       priceType: priceType || 'paid',
-      // ✅ "price" reste TOUJOURS le montant réellement facturé (promo ou non)
       price: priceType === 'paid' ? parseFloat(price) : null,
       contentIds,
       categoryIds: Array.isArray(categoryIds) ? categoryIds : [],
-      // 🆕 Promotion : purement informative pour l'affichage (prix barré côté client)
-      promoEnabled: !!promoEnabled,
-      originalPrice: promoEnabled ? parseFloat(originalPrice) : null,
       createdAt: new Date().toISOString(),
     };
 
@@ -93,11 +85,7 @@ router.post('/admin', verifyToken, isAdmin, async (req, res) => {
 // ============================================================
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, description, price, contentIds, categoryIds, promoEnabled, originalPrice } = req.body;
-
-  if (promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
-    return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
-  }
+  const { title, description, price, contentIds, categoryIds } = req.body;
 
   try {
     const doc = await db.collection('bundles').doc(id).get();
@@ -114,10 +102,6 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
       updates.contentIds = contentIds;
     }
     if (Array.isArray(categoryIds)) updates.categoryIds = categoryIds;
-
-    // 🆕 Promotion
-    updates.promoEnabled = !!promoEnabled;
-    updates.originalPrice = promoEnabled ? parseFloat(originalPrice) : null;
 
     await db.collection('bundles').doc(id).update(updates);
     res.json({ message: 'Pack mis à jour', ...updates });

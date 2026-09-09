@@ -17,7 +17,6 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
-                <a href="formations.html">Formations</a>
                 <a href="support.html">Support</a>
                 <a href="retrouver-achats.html">Retrouver mes achats</a>
                 <a href="admin/login.html" class="btn-admin">Admin</a>
@@ -179,9 +178,6 @@
                 card.style.border = '2px solid #1e5fb0';
 
                 const itemsList = (bundle.items || []).map(i => `<li>${escapeHtml(i.title)}</li>`).join('');
-                const bundlePriceHtml = bundle.promoEnabled
-                    ? `<span style="text-decoration:line-through; color:#7b95b5; font-size:0.75em;">${bundle.originalPrice} FCFA</span> <span style="color:#c73b3b;">${bundle.price || 0} FCFA</span>`
-                    : `💰 ${bundle.price || 0} FCFA`;
 
                 card.innerHTML = `
                     <h3>📦 ${escapeHtml(bundle.title)}</h3>
@@ -191,7 +187,7 @@
                         ${itemsList}
                     </ul>
                     <p style="font-size:1.2rem; font-weight:700; color:#1e5fb0;">
-                        ${bundlePriceHtml}
+                        💰 ${bundle.price || 0} FCFA
                     </p>
                     <button class="btn btn-success" onclick="handleBundleAction('${bundle.id}', ${bundle.price || 0}, '${escapeHtml(bundle.title)}')" style="width:100%; justify-content:center;">
                         <i class="fas fa-shopping-cart"></i> Acheter le pack
@@ -206,11 +202,7 @@
                 card.className = 'content-card';
 
                 const isFree = content.priceType === 'free';
-                const priceDisplay = isFree
-                    ? '📄 Gratuit'
-                    : (content.promoEnabled
-                        ? `<span style="text-decoration:line-through; color:#7b95b5; font-size:0.75em;">${content.originalPrice} FCFA</span> <span style="color:#c73b3b;">${content.price || 0} FCFA</span>`
-                        : `💰 ${content.price || 0} FCFA`);
+                const priceDisplay = isFree ? '📄 Gratuit' : `💰 ${content.price || 0} FCFA`;
                 const buttonText = isFree ? 'Télécharger' : 'Acheter';
                 const buttonClass = isFree ? 'btn btn-secondary' : 'btn btn-success';
 

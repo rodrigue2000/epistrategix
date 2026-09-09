@@ -50,10 +50,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
     unitPrice,
     durationUnit,
     minDuration,
-    maxDuration,
-    // 🆕 Promotion (optionnelle, jamais automatique)
-    promoEnabled,
-    originalPrice,
+    maxDuration
   } = req.body;
   
   // Validation de base
@@ -64,13 +61,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   // Validation selon le type de tarif
   if (priceType === 'fixed' && (price === undefined || price < 0)) {
     return res.status(400).json({ error: 'Prix requis pour tarif fixe' });
-  }
-
-  // ✅ Validation de la promo : le prix promo doit être strictement inférieur au prix normal
-  if (promoEnabled && priceType === 'fixed') {
-    if (originalPrice === undefined || originalPrice <= price) {
-      return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
-    }
   }
   
   // Validation pour la tarification unitaire
@@ -95,8 +85,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       description: description || '',
       provider: provider || '',
       priceType, // 'fixed', 'free', 'unit'
-      // ✅ "price" reste TOUJOURS le montant réellement facturé (promo ou non) —
-      // aucune autre partie du code (réservations, paiements) n'a besoin de changer.
       price: priceType === 'fixed' ? parseFloat(price) : null,
       duration: duration || 60,
       // 🆕 Champs pour la tarification unitaire
@@ -104,10 +92,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       durationUnit: priceType === 'unit' ? parseInt(durationUnit) : null,
       minDuration: priceType === 'unit' ? parseInt(minDuration) : null,
       maxDuration: priceType === 'unit' ? parseInt(maxDuration) : null,
-      // 🆕 Promotion : purement informative pour l'affichage (prix barré côté client).
-      // Jamais automatique — activée/désactivée manuellement par l'admin.
-      promoEnabled: !!(promoEnabled && priceType === 'fixed'),
-      originalPrice: (promoEnabled && priceType === 'fixed') ? parseFloat(originalPrice) : null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

@@ -74,7 +74,7 @@ router.post('/upload', verifyToken, isAdmin, (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { title, description, author, type, solutionType, priceType, price, categoryIds, promoEnabled, originalPrice } = req.body;
+  const { title, description, author, type, solutionType, priceType, price, categoryIds } = req.body;
   const file = req.file;
 
   if (!title || !file) {
@@ -88,12 +88,6 @@ router.post('/upload', verifyToken, isAdmin, (req, res, next) => {
     if (!Array.isArray(parsedCategoryIds)) parsedCategoryIds = [];
   } catch (e) {
     parsedCategoryIds = [];
-  }
-
-  // ✅ FormData transmet tout en chaînes de caractères ("true"/"false")
-  const isPromoEnabled = promoEnabled === 'true' && priceType === 'paid';
-  if (isPromoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
-    return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
   }
 
   try {
@@ -112,11 +106,7 @@ router.post('/upload', verifyToken, isAdmin, (req, res, next) => {
       url: result.secure_url,
       publicId: result.public_id,
       priceType: priceType || 'free',
-      // ✅ "price" reste TOUJOURS le montant réellement facturé (promo ou non)
       price: priceType === 'paid' ? parseFloat(price) : null,
-      // 🆕 Promotion : purement informative pour l'affichage (prix barré côté client)
-      promoEnabled: isPromoEnabled,
-      originalPrice: isPromoEnabled ? parseFloat(originalPrice) : null,
       createdAt: new Date().toISOString(),
     };
     const docRef = await db.collection('contents').add(content);
@@ -135,14 +125,7 @@ router.post('/upload', verifyToken, isAdmin, (req, res, next) => {
 // Pour remplacer le fichier lui-même, voir la route POST /:id/replace-file.
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, description, author, solutionType, priceType, price, categoryIds, promoEnabled, originalPrice } = req.body;
-
-  // ✅ Ici la requête est en JSON (pas FormData), donc promoEnabled est un vrai booléen
-  if (promoEnabled && priceType === 'paid') {
-    if (!originalPrice || parseFloat(originalPrice) <= parseFloat(price)) {
-      return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
-    }
-  }
+  const { title, description, author, solutionType, priceType, price, categoryIds } = req.body;
 
   try {
     const doc = await db.collection('contents').doc(id).get();
@@ -155,18 +138,8 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     if (solutionType !== undefined) updates.solutionType = solutionType;
     if (priceType !== undefined) updates.priceType = priceType;
     if (priceType === 'paid' && price !== undefined) updates.price = parseFloat(price);
-    if (priceType === 'free') {
-      updates.price = null;
-      updates.promoEnabled = false;
-      updates.originalPrice = null;
-    }
+    if (priceType === 'free') updates.price = null;
     if (Array.isArray(categoryIds)) updates.categoryIds = categoryIds;
-
-    // 🆕 Promotion
-    if (priceType === 'paid') {
-      updates.promoEnabled = !!promoEnabled;
-      updates.originalPrice = promoEnabled ? parseFloat(originalPrice) : null;
-    }
 
     await db.collection('contents').doc(id).update(updates);
     res.json({ message: 'Contenu mis à jour', ...updates });

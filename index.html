@@ -15,7 +15,6 @@
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
-                <a href="formations.html">Formations</a>
                 <a href="support.html">Support</a>
                <a href="admin/login.html" class="btn-admin">Admin</a>
             </nav>
@@ -58,16 +57,11 @@
                 services.forEach(service => {
                     const card = document.createElement('div');
                     card.className = 'service-card';
-                    const priceHtml = service.priceType === 'fixed'
-                        ? (service.promoEnabled
-                            ? `<span style="text-decoration:line-through; color:#7b95b5; font-size:0.9em;">${service.originalPrice} FCFA</span> <strong style="color:#c73b3b;">${service.price} FCFA</strong>`
-                            : service.price + ' FCFA')
-                        : 'Prix libre';
                     card.innerHTML = `
                         <h3>${service.name}</h3>
                         <p>${service.description || ''}</p>
                         ${service.provider ? `<p style="color:#7b95b5; font-size:0.85rem; font-style:italic;">Par ${service.provider}</p>` : ''}
-                        <p class="price">${priceHtml}</p>
+                        <p class="price">${service.priceType === 'fixed' ? service.price + ' FCFA' : 'Prix libre'}</p>
                         <a href="reservation.html?service=${service.id}" class="btn btn-secondary">Réserver</a>
                     `;
                     container.appendChild(card);

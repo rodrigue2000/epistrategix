@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions de formation - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Sessions de formation</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <a href="sessions-admin.html">Formations</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>Créer une session de formation</h2>
+            <form id="sessionForm">
+                <div class="form-group">
+                    <label>Titre</label>
+                    <input type="text" id="sessionTitle" required placeholder="ex: Atelier stratégie commerciale">
+                </div>
+                <div class="form-group">
+                    <label>Description (affichée au client)</label>
+                    <textarea id="sessionDescription" rows="3" placeholder="Décris le contenu, les objectifs, à qui ça s'adresse..."></textarea>
+                </div>
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1; min-width:150px;">
+                        <label>Date de la session</label>
+                        <input type="date" id="sessionDate" required>
+                    </div>
+                    <div class="form-group" style="flex:1; min-width:120px;">
+                        <label>Heure</label>
+                        <input type="time" id="sessionTime" required>
+                    </div>
+                    <div class="form-group" style="flex:1; min-width:120px;">
+                        <label>Durée (minutes)</label>
+                        <input type="number" id="sessionDuration" value="120" min="15" step="15">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Date limite d'inscription</label>
+                    <input type="datetime-local" id="sessionDeadline" required>
+                    <small style="color:#4d6f94;">Passé ce moment, plus personne ne pourra s'inscrire.</small>
+                </div>
+                <div class="form-group">
+                    <label>Nombre maximum de participants</label>
+                    <input type="number" id="sessionMaxParticipants" required min="1" value="20">
+                </div>
+                <div class="form-group">
+                    <label>Type de tarif</label>
+                    <select id="sessionPriceType">
+                        <option value="paid">Payant</option>
+                        <option value="free">Gratuit</option>
+                    </select>
+                </div>
+                <div class="form-group" id="sessionPriceField">
+                    <label id="sessionPriceLabel">Prix (FCFA)</label>
+                    <input type="number" id="sessionPrice" placeholder="0" step="1" min="0">
+
+                    <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" id="sessionPromoEnabled">
+                        <span>Cette session est en promotion</span>
+                    </label>
+                    <div id="sessionPromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
+                        <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
+                            ⚠️ Le champ "Prix" ci-dessus est celui réellement facturé au client. Renseigne ici le prix d'origine, affiché barré.
+                        </p>
+                        <label>Prix avant réduction (FCFA) — affiché barré, jamais facturé</label>
+                        <input type="number" id="sessionOriginalPrice" placeholder="0" step="1" min="0">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> Créer la session
+                </button>
+                <div id="formError" style="color:#c73b3b; margin-top:0.5rem; display:none;"></div>
+            </form>
+
+            <h3 style="margin-top:2rem;">Sessions existantes</h3>
+            <div id="sessionsList"></div>
+        </div>
+    </main>
+
+    <!-- MODALE LISTE DES INSCRITS -->
+    <div id="registrationsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:1.5rem; padding:1.75rem; max-width:600px; width:92%; max-height:85vh; overflow-y:auto; box-shadow:0 24px 70px rgba(10,38,71,0.35);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 id="registrationsSessionTitle" style="margin:0; color:#0a2647;">Inscrits</h3>
+                <button onclick="closeRegistrationsModal()" style="background:none; border:none; font-size:1.3rem; color:#7b95b5; cursor:pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Compare cette liste aux demandes d'entrée dans la salle d'attente Jitsi le jour de la session
+                — n'accepte que les noms qui correspondent.
+            </p>
+            <div id="registrationsLink" style="background:#eef4ff; border-radius:1rem; padding:0.9rem; margin-bottom:1rem; word-break:break-all; font-size:0.85rem;"></div>
+            <div id="registrationsListContent"></div>
+        </div>
+    </div>
+
+    <script src="../js/admin.js"></script>
+    <script>
+        let allSessions = [];
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return;
+            const token = await user.getIdToken();
+            loadSessions(token);
+        });
+
+        document.getElementById('sessionPriceType').addEventListener('change', function() {
+            document.getElementById('sessionPriceField').style.display = this.value === 'paid' ? 'block' : 'none';
+        });
+
+        document.getElementById('sessionPromoEnabled').addEventListener('change', function() {
+            document.getElementById('sessionPromoFields').style.display = this.checked ? 'block' : 'none';
+            document.getElementById('sessionPriceLabel').textContent = this.checked
+                ? 'Prix ACTUEL, facturé au client (FCFA)'
+                : 'Prix (FCFA)';
+        });
+
+        async function loadSessions(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/trainings`);
+                allSessions = await response.json();
+                const container = document.getElementById('sessionsList');
+
+                if (allSessions.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#4d6f94; padding:2rem;">Aucune session créée.</p>';
+                    return;
+                }
+
+                container.innerHTML = allSessions.map(s => {
+                    const priceDisplay = s.priceType === 'free'
+                        ? 'Gratuit'
+                        : (s.promoEnabled
+                            ? `<span style="text-decoration:line-through; color:#7b95b5;">${s.originalPrice} FCFA</span> <strong style="color:#c73b3b;">${s.price} FCFA</strong>`
+                            : `${s.price} FCFA`);
+
+                    return `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; border:1px solid #e2ebf6;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                            <div>
+                                <strong>${s.title}</strong>
+                                <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">${s.date} à ${s.time}</span>
+                                <br>
+                                <span style="color:#4d6f94; font-size:0.85rem;">
+                                    ${priceDisplay} · ${s.registeredCount || 0}/${s.maxParticipants} inscrit(s)
+                                    ${s.registrationClosed ? ' · <span style="color:#c73b3b;">Inscriptions closes</span>' : ''}
+                                </span>
+                            </div>
+                            <div style="display:flex; gap:0.5rem;">
+                                <button onclick="viewRegistrations('${s.id}')" class="btn btn-outline btn-sm">
+                                    <i class="fas fa-users"></i> Inscrits
+                                </button>
+                                <button onclick="deleteSession('${s.id}')" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `}).join('');
+            } catch (error) {
+                console.error('Erreur chargement sessions:', error);
+            }
+        }
+
+        document.getElementById('sessionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const title = document.getElementById('sessionTitle').value.trim();
+            const description = document.getElementById('sessionDescription').value.trim();
+            const date = document.getElementById('sessionDate').value;
+            const time = document.getElementById('sessionTime').value;
+            const durationMinutes = parseInt(document.getElementById('sessionDuration').value);
+            const registrationDeadline = document.getElementById('sessionDeadline').value;
+            const maxParticipants = parseInt(document.getElementById('sessionMaxParticipants').value);
+            const priceType = document.getElementById('sessionPriceType').value;
+            const price = parseFloat(document.getElementById('sessionPrice').value) || 0;
+            const promoEnabled = document.getElementById('sessionPromoEnabled').checked;
+            const originalPrice = parseFloat(document.getElementById('sessionOriginalPrice').value);
+            const errorDiv = document.getElementById('formError');
+
+            errorDiv.style.display = 'none';
+
+            if (!title || !date || !time || !registrationDeadline || !maxParticipants) {
+                errorDiv.textContent = '⚠️ Merci de remplir tous les champs obligatoires.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (priceType === 'paid' && promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
+                errorDiv.textContent = '⚠️ Le prix normal doit être supérieur au prix promo.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const payload = {
+                title, description, date, time, durationMinutes,
+                registrationDeadline: new Date(registrationDeadline).toISOString(),
+                maxParticipants, priceType, price,
+                promoEnabled: priceType === 'paid' && promoEnabled,
+                originalPrice: priceType === 'paid' && promoEnabled ? originalPrice : null,
+            };
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/trainings/admin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                alert('✅ Session créée avec succès');
+                document.getElementById('sessionForm').reset();
+                loadSessions(token);
+            } catch (error) {
+                errorDiv.textContent = '❌ ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+            }
+        });
+
+        window.viewRegistrations = async function(sessionId) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/trainings/${sessionId}/registrations`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+
+                document.getElementById('registrationsSessionTitle').textContent = `Inscrits — ${data.session.title}`;
+                document.getElementById('registrationsLink').innerHTML = `
+                    <strong>Lien Jitsi (à ouvrir en tant qu'hôte) :</strong><br>
+                    <a href="https://meet.jit.si/${data.session.jitsiRoomName}" target="_blank">https://meet.jit.si/${data.session.jitsiRoomName}</a>
+                `;
+
+                const listContainer = document.getElementById('registrationsListContent');
+                if (data.registrations.length === 0) {
+                    listContainer.innerHTML = '<p style="color:#4d6f94;">Aucun inscrit pour le moment.</p>';
+                } else {
+                    listContainer.innerHTML = data.registrations.map(r => `
+                        <div style="display:flex; justify-content:space-between; padding:0.6rem 0; border-bottom:1px solid #f0f4fa;">
+                            <span><strong>${r.name}</strong></span>
+                            <span style="color:#4d6f94; font-size:0.9rem;">${r.email}</span>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('registrationsModal').style.display = 'flex';
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+
+        function closeRegistrationsModal() {
+            document.getElementById('registrationsModal').style.display = 'none';
+        }
+
+        window.deleteSession = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+            if (!confirm('Supprimer cette session ? Les inscriptions déjà payées resteront enregistrées mais orphelines.')) return;
+
+            try {
+                const token = await user.getIdToken();
+                await fetch(`${API_URL}/api/trainings/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                loadSessions(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+    </script>
+</body>
+</html>
