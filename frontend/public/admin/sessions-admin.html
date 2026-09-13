@@ -93,6 +93,78 @@
         </div>
     </main>
 
+    <!-- MODALE D'ÉDITION D'UNE SESSION -->
+    <div id="editSessionModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:1.5rem; padding:1.75rem; max-width:550px; width:92%; max-height:85vh; overflow-y:auto; box-shadow:0 24px 70px rgba(10,38,71,0.35);">
+            <h3 style="color:#0a2647; margin-bottom:1rem;">
+                <i class="fas fa-edit"></i> Modifier la session
+            </h3>
+            <input type="hidden" id="editSessionId">
+            <div class="form-group">
+                <label>Titre</label>
+                <input type="text" id="editSessionTitle" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="editSessionDescription" rows="3"></textarea>
+            </div>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                <div class="form-group" style="flex:1; min-width:150px;">
+                    <label>Date</label>
+                    <input type="date" id="editSessionDate" required>
+                </div>
+                <div class="form-group" style="flex:1; min-width:120px;">
+                    <label>Heure</label>
+                    <input type="time" id="editSessionTime" required>
+                </div>
+                <div class="form-group" style="flex:1; min-width:120px;">
+                    <label>Durée (min)</label>
+                    <input type="number" id="editSessionDuration" min="15" step="15">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Date limite d'inscription</label>
+                <input type="datetime-local" id="editSessionDeadline" required>
+            </div>
+            <div class="form-group">
+                <label>Nombre maximum de participants</label>
+                <input type="number" id="editSessionMaxParticipants" required min="1">
+            </div>
+            <div class="form-group">
+                <label>Type de tarif</label>
+                <select id="editSessionPriceType">
+                    <option value="paid">Payant</option>
+                    <option value="free">Gratuit</option>
+                </select>
+            </div>
+            <div class="form-group" id="editSessionPriceField">
+                <label id="editSessionPriceLabel">Prix (FCFA)</label>
+                <input type="number" id="editSessionPrice" step="1" min="0">
+
+                <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
+                    <input type="checkbox" id="editSessionPromoEnabled">
+                    <span>Cette session est en promotion</span>
+                </label>
+                <div id="editSessionPromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
+                    <p style="font-size:0.85rem; color:#8a6d1a; margin-bottom:0.6rem;">
+                        ⚠️ Le champ "Prix" ci-dessus est celui réellement facturé. Renseigne ici le prix d'origine, affiché barré.
+                    </p>
+                    <label>Prix avant réduction (FCFA)</label>
+                    <input type="number" id="editSessionOriginalPrice" step="1" min="0">
+                </div>
+            </div>
+            <div id="editSessionFormError" style="color:#c73b3b; margin-bottom:0.8rem; display:none;"></div>
+            <div style="display:flex; gap:0.6rem; margin-top:1rem;">
+                <button id="saveSessionEditBtn" class="btn btn-primary" style="flex:1; justify-content:center;">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button onclick="closeEditSessionModal()" class="btn btn-outline" style="flex:1; justify-content:center;">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODALE LISTE DES INSCRITS -->
     <div id="registrationsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
         <div style="background:white; border-radius:1.5rem; padding:1.75rem; max-width:600px; width:92%; max-height:85vh; overflow-y:auto; box-shadow:0 24px 70px rgba(10,38,71,0.35);">
@@ -163,6 +235,9 @@
                                 </span>
                             </div>
                             <div style="display:flex; gap:0.5rem;">
+                                <button onclick='openEditSessionModal(${JSON.stringify(s)})' class="btn btn-outline btn-sm">
+                                    <i class="fas fa-pen"></i>
+                                </button>
                                 <button onclick="viewRegistrations('${s.id}')" class="btn btn-outline btn-sm">
                                     <i class="fas fa-users"></i> Inscrits
                                 </button>
@@ -256,6 +331,10 @@
                 });
                 const data = await response.json();
 
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors du chargement des inscrits');
+                }
+
                 document.getElementById('registrationsSessionTitle').textContent = `Inscrits — ${data.session.title}`;
                 document.getElementById('registrationsLink').innerHTML = `
                     <strong>Lien Jitsi (à ouvrir en tant qu'hôte) :</strong><br>
@@ -283,6 +362,118 @@
         function closeRegistrationsModal() {
             document.getElementById('registrationsModal').style.display = 'none';
         }
+
+        // ================================================================
+        // ÉDITER UNE SESSION
+        // ================================================================
+        document.getElementById('editSessionPriceType').addEventListener('change', function() {
+            document.getElementById('editSessionPriceField').style.display = this.value === 'paid' ? 'block' : 'none';
+        });
+
+        document.getElementById('editSessionPromoEnabled').addEventListener('change', function() {
+            document.getElementById('editSessionPromoFields').style.display = this.checked ? 'block' : 'none';
+            document.getElementById('editSessionPriceLabel').textContent = this.checked
+                ? 'Prix ACTUEL, facturé au client (FCFA)'
+                : 'Prix (FCFA)';
+        });
+
+        window.openEditSessionModal = function(session) {
+            document.getElementById('editSessionId').value = session.id;
+            document.getElementById('editSessionTitle').value = session.title || '';
+            document.getElementById('editSessionDescription').value = session.description || '';
+            document.getElementById('editSessionDate').value = session.date || '';
+            document.getElementById('editSessionTime').value = session.time || '';
+            document.getElementById('editSessionDuration').value = session.durationMinutes || 120;
+            // datetime-local a besoin du format YYYY-MM-DDTHH:mm (sans les secondes/Z)
+            document.getElementById('editSessionDeadline').value = session.registrationDeadline
+                ? session.registrationDeadline.slice(0, 16)
+                : '';
+            document.getElementById('editSessionMaxParticipants').value = session.maxParticipants || 20;
+            document.getElementById('editSessionPriceType').value = session.priceType || 'paid';
+            document.getElementById('editSessionPrice').value = session.price || 0;
+            document.getElementById('editSessionPromoEnabled').checked = !!session.promoEnabled;
+            document.getElementById('editSessionOriginalPrice').value = session.originalPrice || 0;
+
+            document.getElementById('editSessionPriceField').style.display = session.priceType === 'paid' ? 'block' : 'none';
+            document.getElementById('editSessionPromoFields').style.display = session.promoEnabled ? 'block' : 'none';
+            document.getElementById('editSessionPriceLabel').textContent = session.promoEnabled
+                ? 'Prix ACTUEL, facturé au client (FCFA)'
+                : 'Prix (FCFA)';
+
+            document.getElementById('editSessionFormError').style.display = 'none';
+            document.getElementById('editSessionModal').style.display = 'flex';
+        };
+
+        function closeEditSessionModal() {
+            document.getElementById('editSessionModal').style.display = 'none';
+        }
+
+        document.getElementById('saveSessionEditBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const errorDiv = document.getElementById('editSessionFormError');
+            errorDiv.style.display = 'none';
+
+            const id = document.getElementById('editSessionId').value;
+            const title = document.getElementById('editSessionTitle').value.trim();
+            const description = document.getElementById('editSessionDescription').value.trim();
+            const date = document.getElementById('editSessionDate').value;
+            const time = document.getElementById('editSessionTime').value;
+            const durationMinutes = parseInt(document.getElementById('editSessionDuration').value);
+            const registrationDeadline = document.getElementById('editSessionDeadline').value;
+            const maxParticipants = parseInt(document.getElementById('editSessionMaxParticipants').value);
+            const priceType = document.getElementById('editSessionPriceType').value;
+            const price = parseFloat(document.getElementById('editSessionPrice').value) || 0;
+            const promoEnabled = document.getElementById('editSessionPromoEnabled').checked;
+            const originalPrice = parseFloat(document.getElementById('editSessionOriginalPrice').value);
+
+            if (!title || !date || !time || !registrationDeadline || !maxParticipants) {
+                errorDiv.textContent = '⚠️ Merci de remplir tous les champs obligatoires.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (priceType === 'paid' && promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
+                errorDiv.textContent = '⚠️ Le prix normal doit être supérieur au prix promo.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const payload = {
+                title, description, date, time, durationMinutes,
+                registrationDeadline: new Date(registrationDeadline).toISOString(),
+                maxParticipants, priceType, price,
+                promoEnabled: priceType === 'paid' && promoEnabled,
+                originalPrice: priceType === 'paid' && promoEnabled ? originalPrice : null,
+            };
+
+            const btn = document.getElementById('saveSessionEditBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/trainings/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                alert('✅ Session mise à jour');
+                closeEditSessionModal();
+                loadSessions(token);
+            } catch (error) {
+                errorDiv.textContent = '❌ ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        });
 
         window.deleteSession = async function(id) {
             const user = firebase.auth().currentUser;

@@ -100,11 +100,11 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
   const {
     title, description, date, time, durationMinutes,
-    price, promoEnabled, originalPrice,
+    priceType, price, promoEnabled, originalPrice,
     maxParticipants, registrationDeadline,
   } = req.body;
 
-  if (promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
+  if (priceType === 'paid' && promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
     return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
   }
 
@@ -118,11 +118,19 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     if (date !== undefined) updates.date = date;
     if (time !== undefined) updates.time = time;
     if (durationMinutes !== undefined) updates.durationMinutes = durationMinutes;
-    if (price !== undefined) updates.price = parseFloat(price);
+    if (priceType !== undefined) updates.priceType = priceType;
     if (maxParticipants !== undefined) updates.maxParticipants = parseInt(maxParticipants);
     if (registrationDeadline !== undefined) updates.registrationDeadline = registrationDeadline;
-    updates.promoEnabled = !!promoEnabled;
-    updates.originalPrice = promoEnabled ? parseFloat(originalPrice) : null;
+
+    if (priceType === 'free') {
+      updates.price = 0;
+      updates.promoEnabled = false;
+      updates.originalPrice = null;
+    } else {
+      if (price !== undefined) updates.price = parseFloat(price);
+      updates.promoEnabled = !!promoEnabled;
+      updates.originalPrice = promoEnabled ? parseFloat(originalPrice) : null;
+    }
 
     await db.collection('training_sessions').doc(id).update(updates);
     res.json({ message: 'Session mise à jour', ...updates });
