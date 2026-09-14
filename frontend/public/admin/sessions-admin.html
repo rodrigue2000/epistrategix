@@ -235,7 +235,7 @@
                                 </span>
                             </div>
                             <div style="display:flex; gap:0.5rem;">
-                                <button onclick='openEditSessionModal(${JSON.stringify(s)})' class="btn btn-outline btn-sm">
+                                <button onclick="openEditSessionModal('${s.id}')" class="btn btn-outline btn-sm">
                                     <i class="fas fa-pen"></i>
                                 </button>
                                 <button onclick="viewRegistrations('${s.id}')" class="btn btn-outline btn-sm">
@@ -377,7 +377,13 @@
                 : 'Prix (FCFA)';
         });
 
-        window.openEditSessionModal = function(session) {
+        window.openEditSessionModal = function(sessionId) {
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) {
+                alert('Session non trouvée');
+                return;
+            }
+
             document.getElementById('editSessionId').value = session.id;
             document.getElementById('editSessionTitle').value = session.title || '';
             document.getElementById('editSessionDescription').value = session.description || '';

@@ -1,56 +1,49 @@
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 
-// ✅ Variables d'environnement à définir sur Render :
-// SMTP_HOST=smtp.gmail.com
-// SMTP_PORT=587
-// SMTP_USER=tonadresse@gmail.com
-// SMTP_PASS=<mot de passe d'application Gmail> (PAS ton mot de passe normal)
-// SMTP_FROM=EpiStrategix <tonadresse@gmail.com>  (optionnel)
+// ✅ Brevo (ex-Sendinblue) : API HTTP (port 443, jamais bloqué par Render,
+// contrairement au SMTP classique). Plan gratuit : 300 emails/jour à vie,
+// vérification d'une simple adresse email (pas de domaine requis), envoi
+// possible vers n'importe quel destinataire.
 //
-// ⚠️ Pourquoi Gmail et pas Resend pour l'instant : le domaine gratuit
-// resend.dev ne peut envoyer QUE vers l'adresse email du compte Resend
-// lui-même, pas vers de vrais clients, tant qu'aucun domaine personnalisé
-// n'est vérifié. Comme le site n'a pas encore de domaine personnel
-// (juste epistrategix.web.app, qui appartient à Firebase), Gmail est la
-// seule option qui fonctionne réellement dès maintenant pour contacter
-// de vrais clients. À remplacer par Resend (ou autre) une fois qu'un
-// domaine personnalisé sera acheté et vérifié — seul ce fichier changera.
+// ⚠️ Après inscription, Brevo valide manuellement les nouveaux comptes
+// avant d'activer l'envoi — généralement sous quelques heures, pas un blocage
+// permanent, juste un délai à anticiper.
 //
-// Comment générer un "mot de passe d'application" Gmail :
-// Compte Google → Sécurité → Validation en 2 étapes (doit être activée)
-// → Mots de passe des applications → Créer → copier la valeur générée.
+// Variables d'environnement à définir sur Render :
+// BREVO_API_KEY=xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+// EMAIL_FROM=tonadresse@gmail.com (doit être vérifiée dans Brevo d'abord :
+//   Dashboard → Senders, Domains & Dedicated IPs → Senders → Add a sender)
 
-let transporter = null;
-
-try {
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_PORT === '465',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-    console.log('✅ Transporteur email configuré (Gmail SMTP)');
-  } else {
-    console.warn('⚠️ Variables SMTP manquantes — l\'envoi d\'email est désactivé');
-  }
-} catch (error) {
-  console.error('❌ Erreur configuration email:', error.message);
-}
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
 async function sendEmail({ to, subject, html }) {
-  if (!transporter) {
-    throw new Error('Service email non configuré (variables SMTP manquantes sur le serveur)');
+  const apiKey = process.env.BREVO_API_KEY;
+  const from = process.env.EMAIL_FROM;
+
+  if (!apiKey || !from) {
+    throw new Error('Service email non configuré (BREVO_API_KEY ou EMAIL_FROM manquant sur le serveur)');
   }
-  return transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to,
-    subject,
-    html,
-  });
+
+  try {
+    const response = await axios.post(BREVO_API_URL, {
+      sender: { email: from, name: 'EpiStrategix' },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }, {
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+
+    return response.data;
+  } catch (error) {
+    const apiError = error.response?.data?.message || error.response?.data || error.message;
+    console.error('❌ Erreur Brevo:', apiError);
+    throw new Error(typeof apiError === 'string' ? apiError : 'Erreur lors de l\'envoi de l\'email');
+  }
 }
 
 module.exports = { sendEmail };

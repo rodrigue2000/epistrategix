@@ -617,7 +617,7 @@
                             </a>
                         </div>
                         <div>
-                            <button onclick='openEditContentModal(${JSON.stringify(c)})' class="btn btn-outline btn-sm" style="margin-right:4px;">
+                            <button onclick="openEditContentModal('${c.id}')" class="btn btn-outline btn-sm" style="margin-right:4px;">
                                 <i class="fas fa-edit"></i> Modifier
                             </button>
                             <button onclick="deleteContent('${c.id}')" class="btn btn-danger btn-sm">
@@ -917,7 +917,13 @@
         // ================================================================
         // ÉDITION D'UN CONTENU (métadonnées uniquement)
         // ================================================================
-        window.openEditContentModal = function(content) {
+        window.openEditContentModal = function(contentId) {
+            const content = allContentsAdmin.find(c => c.id === contentId);
+            if (!content) {
+                alert('Contenu non trouvé');
+                return;
+            }
+
             document.getElementById('editContentId').value = content.id;
             document.getElementById('editContentTitle').value = content.title || '';
             document.getElementById('editContentDescription').value = content.description || '';
