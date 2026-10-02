@@ -65,6 +65,7 @@ if (firebaseReady) {
         const categoriesRoutes = require('./routes/categories');
         const purchasesRoutes = require('./routes/purchases');
         const trainingsRoutes = require('./routes/trainings');
+        const coursesRoutes = require('./routes/courses');
         const adminRoutes = require('./routes/admin');
         const webhookRoutes = require('./webhooks/fedapay');
 
@@ -76,6 +77,7 @@ if (firebaseReady) {
         app.use('/api/categories', categoriesRoutes);
         app.use('/api/purchases', purchasesRoutes);
         app.use('/api/trainings', trainingsRoutes);
+        app.use('/api/courses', coursesRoutes);
         app.use('/api/admin', adminRoutes);
 
         // ✅ Chemin corrigé : "webhooks" au pluriel, pour correspondre

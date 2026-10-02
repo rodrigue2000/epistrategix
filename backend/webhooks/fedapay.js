@@ -42,7 +42,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     // toute transaction qui ne porte pas les métadonnées propres à EpiStrategix,
     // au lieu d'essayer de mettre à jour un document Firestore qui n'existe
     // pas ici (ce qui provoquait une erreur avant ce correctif).
-    const belongsToEpiStrategix = !!(metadata.reservationId || metadata.contentId || metadata.bundleId || metadata.sessionId);
+    const belongsToEpiStrategix = !!(metadata.reservationId || metadata.contentId || metadata.bundleId || metadata.sessionId || metadata.courseId);
     if (!belongsToEpiStrategix) {
       console.log(`ℹ️ Transaction ${transactionId} ignorée — ne concerne pas EpiStrategix (compte FedaPay partagé)`);
       return res.status(200).json({ received: true, ignored: true });
@@ -118,6 +118,19 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           registeredAt: new Date().toISOString(),
         });
         console.log(`✅ Inscription à la session ${metadata.sessionId} confirmée`);
+      }
+
+      // ✅ Pour les inscriptions à une formation vidéo (avec suivi de progression)
+      if (metadata.contentType === 'course_purchase' && metadata.courseId && metadata.clientUid) {
+        await db.collection('enrollments').doc(transactionId).set({
+          courseId: metadata.courseId,
+          courseTitle: metadata.courseTitle || 'Formation',
+          clientUid: metadata.clientUid,
+          clientEmail: transaction.customer?.email || '',
+          enrolledAt: new Date().toISOString(),
+          completed: false,
+        });
+        console.log(`✅ Inscription à la formation ${metadata.courseId} confirmée pour ${metadata.clientUid}`);
       }
     } else if (event.name === 'transaction.declined' || event.name === 'transaction.canceled') {
       await db.collection('transactions').doc(transactionId).set({

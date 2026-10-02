@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formation - EpiStrategix</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
+            <nav>
+                <a href="mon-compte.html">Mon compte</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2 id="courseTitle">Chargement...</h2>
+            <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1.5rem;">
+                <div style="flex:2; min-width:300px;">
+                    <video id="videoPlayer" controls controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false;" style="width:100%; border-radius:1rem; background:#000;"></video>
+                    <h3 id="currentVideoTitle" style="margin-top:1rem;"></h3>
+                    <button id="markCompleteBtn" class="btn btn-success" style="margin-top:0.5rem;">
+                        <i class="fas fa-check"></i> Marquer comme terminée
+                    </button>
+                </div>
+                <div style="flex:1; min-width:250px;">
+                    <h4>Vidéos de la formation</h4>
+                    <div id="playlist"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+        const firebaseConfig = {
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+        const params = new URLSearchParams(window.location.search);
+        const courseId = params.get('courseId');
+        let currentVideos = [];
+        let currentIndex = 0;
+        let authToken = null;
+
+        if (!courseId) {
+            document.getElementById('courseTitle').textContent = 'Formation non spécifiée';
+        }
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'connexion.html';
+                return;
+            }
+            authToken = await user.getIdToken();
+            loadVideos();
+        });
+
+        async function loadVideos() {
+            try {
+                const response = await fetch(`${API_URL}/api/courses/${courseId}/videos`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(data.error || 'Impossible de charger cette formation');
+                    window.location.href = 'mon-compte.html';
+                    return;
+                }
+
+                document.getElementById('courseTitle').textContent = data.courseTitle;
+                currentVideos = data.videos;
+                renderPlaylist();
+
+                const firstIncomplete = currentVideos.findIndex(v => !v.completed);
+                playVideo(firstIncomplete >= 0 ? firstIncomplete : 0);
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        function renderPlaylist() {
+            const container = document.getElementById('playlist');
+            container.innerHTML = currentVideos.map((v, i) => `
+                <div onclick="playVideo(${i})" style="padding:0.7rem; border-radius:0.8rem; cursor:pointer; margin-bottom:0.4rem; background:${i === currentIndex ? '#eef4ff' : 'white'}; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${i + 1}. ${v.title}</span>
+                    ${v.completed ? '<i class="fas fa-check-circle" style="color:#1f9a6e;"></i>' : ''}
+                </div>
+            `).join('');
+        }
+
+        window.playVideo = function(index) {
+            currentIndex = index;
+            const video = currentVideos[index];
+            document.getElementById('videoPlayer').src = video.url;
+            document.getElementById('currentVideoTitle').textContent = video.title;
+            renderPlaylist();
+        };
+
+        document.getElementById('markCompleteBtn').addEventListener('click', async () => {
+            const video = currentVideos[currentIndex];
+            try {
+                const response = await fetch(`${API_URL}/api/courses/${courseId}/videos/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                    body: JSON.stringify({ publicId: video.publicId })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+
+                currentVideos[currentIndex].completed = true;
+                renderPlaylist();
+
+                if (data.courseCompleted) {
+                    alert('🎓 Félicitations, vous avez terminé cette formation ! Votre certificat sera bientôt disponible.');
+                }
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

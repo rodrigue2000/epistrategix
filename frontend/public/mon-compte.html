@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon compte - EpiStrategix</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
+            <nav>
+                <a href="index.html">Accueil</a>
+                <a href="bibliotheque.html">Bibliothèque</a>
+                <a href="formations.html">Formations</a>
+                <a href="mon-compte.html">Mon compte</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>🎓 Mes formations vidéo</h2>
+            <p id="welcomeMsg" style="color:#4d6f94; margin-bottom:1.5rem;"></p>
+
+            <div id="enrollmentMsg" style="display:none; margin-bottom:1.5rem;"></div>
+
+            <div id="coursesList" class="grid">
+                <div style="grid-column:1/-1; text-align:center; padding:2rem; color:#4d6f94;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i>
+                </div>
+            </div>
+
+            <h3 style="margin-top:2.5rem;">🏆 Mes certificats</h3>
+            <p style="color:#7b95b5; font-size:0.9rem;">Disponible prochainement.</p>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 EpiStrategix - Tous droits réservés</p>
+        </div>
+    </footer>
+
+    <script>
+        const API_URL = 'https://epistrategix-backend.onrender.com';
+        const firebaseConfig = {
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'connexion.html';
+                return;
+            }
+
+            document.getElementById('welcomeMsg').textContent = `Connecté en tant que ${user.email}`;
+
+            const params = new URLSearchParams(window.location.search);
+            const enrollment = params.get('enrollment');
+            if (enrollment) {
+                const msgDiv = document.getElementById('enrollmentMsg');
+                msgDiv.style.display = 'block';
+                if (enrollment === 'success') {
+                    msgDiv.innerHTML = '<div style="background:#d4edda; color:#155724; padding:1rem; border-radius:1rem;"><i class="fas fa-check-circle"></i> Inscription confirmée !</div>';
+                } else {
+                    msgDiv.innerHTML = '<div style="background:#f8d7da; color:#721c24; padding:1rem; border-radius:1rem;"><i class="fas fa-exclamation-circle"></i> Le paiement n\'a pas abouti.</div>';
+                }
+            }
+
+            const token = await user.getIdToken();
+            loadMyCourses(token);
+        });
+
+        async function loadMyCourses(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/courses/my-courses`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const courses = await response.json();
+                const container = document.getElementById('coursesList');
+
+                if (courses.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column:1/-1;">
+                            <p>Vous n'êtes inscrit à aucune formation pour le moment.</p>
+                            <a href="formations.html" class="btn btn-primary">Voir les formations disponibles</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = courses.map(c => {
+                    const percent = c.totalVideos > 0 ? Math.round((c.completedVideos / c.totalVideos) * 100) : 0;
+                    return `
+                        <div class="content-card">
+                            <h3>${c.courseTitle}</h3>
+                            <div style="background:#e2ebf6; border-radius:40px; height:10px; overflow:hidden; margin:0.8rem 0;">
+                                <div style="background:${c.completed ? '#1f9a6e' : '#1e5fb0'}; height:100%; width:${percent}%;"></div>
+                            </div>
+                            <p style="color:#4d6f94; font-size:0.85rem;">${c.completedVideos}/${c.totalVideos} vidéos vues ${c.completed ? '· 🎓 Terminée' : ''}</p>
+                            <a href="formation-video.html?courseId=${c.courseId}" class="btn btn-primary" style="width:100%; justify-content:center;">
+                                <i class="fas fa-play"></i> ${c.completed ? 'Revoir' : 'Continuer'}
+                            </a>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            firebase.auth().signOut();
+            window.location.href = 'index.html';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formations vidéo - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Formations vidéo</h1>
+            <nav>
+                <a href="dashboard.html">KPI</a>
+                <a href="services.html">Services</a>
+                <a href="calendrier.html">Calendrier</a>
+                <a href="contenus.html">Contenus</a>
+                <a href="sessions-admin.html">Formations live</a>
+                <a href="cours-admin.html">Formations vidéo</a>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h2>1. Uploader les vidéos de la formation</h2>
+            <p style="color:#4d6f94; font-size:0.9rem; margin-bottom:1rem;">
+                Uploade chaque vidéo une par une, dans l'ordre souhaité. Elles seront assemblées en formation à l'étape 2.
+            </p>
+            <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
+                <input type="text" id="videoTitleInput" placeholder="Titre de la vidéo" style="flex:1; min-width:200px; padding:0.6rem; border-radius:12px; border:1px solid #dce7f5;">
+                <input type="file" id="videoFileInput" accept="video/*">
+                <button id="uploadVideoBtn" class="btn btn-secondary">
+                    <i class="fas fa-upload"></i> Uploader
+                </button>
+            </div>
+            <div id="uploadProgressContainer" style="display:none; margin-bottom:1rem;">
+                <div style="background:#e2ebf6; border-radius:40px; height:14px; overflow:hidden;">
+                    <div id="uploadProgressBar" style="background:#1e5fb0; height:100%; width:0%; transition:width 0.2s;"></div>
+                </div>
+                <p id="uploadProgressText" style="text-align:center; color:#4d6f94; font-size:0.85rem; margin-top:0.4rem;">0%</p>
+            </div>
+
+            <h3>Vidéos prêtes à assembler</h3>
+            <div id="pendingVideosList" style="margin-bottom:2rem;">
+                <p style="color:#4d6f94;">Aucune vidéo uploadée pour le moment.</p>
+            </div>
+
+            <h2>2. Créer la formation</h2>
+            <form id="courseForm">
+                <div class="form-group">
+                    <label>Titre de la formation</label>
+                    <input type="text" id="courseTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description (affichée au client)</label>
+                    <textarea id="courseDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Type de tarif</label>
+                    <select id="coursePriceType">
+                        <option value="paid">Payant</option>
+                        <option value="free">Gratuit</option>
+                    </select>
+                </div>
+                <div class="form-group" id="coursePriceField">
+                    <label id="coursePriceLabel">Prix (FCFA)</label>
+                    <input type="number" id="coursePrice" step="1" min="0">
+                    <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.8rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" id="coursePromoEnabled">
+                        <span>Cette formation est en promotion</span>
+                    </label>
+                    <div id="coursePromoFields" style="display:none; margin-top:0.6rem; padding:0.8rem; background:#fff8e1; border:1px solid #f5deb3; border-radius:0.8rem;">
+                        <label>Prix avant réduction (FCFA)</label>
+                        <input type="number" id="courseOriginalPrice" step="1" min="0">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> Créer la formation (avec les vidéos listées ci-dessus)
+                </button>
+                <div id="courseFormError" style="color:#c73b3b; margin-top:0.5rem; display:none;"></div>
+            </form>
+
+            <h3 style="margin-top:2rem;">Formations existantes</h3>
+            <div id="coursesList"></div>
+        </div>
+    </main>
+
+    <script src="../js/admin.js"></script>
+    <script>
+        let pendingVideos = [];
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) return;
+            const token = await user.getIdToken();
+            loadCourses(token);
+        });
+
+        document.getElementById('coursePriceType').addEventListener('change', function() {
+            document.getElementById('coursePriceField').style.display = this.value === 'paid' ? 'block' : 'none';
+        });
+        document.getElementById('coursePromoEnabled').addEventListener('change', function() {
+            document.getElementById('coursePromoFields').style.display = this.checked ? 'block' : 'none';
+            document.getElementById('coursePriceLabel').textContent = this.checked
+                ? 'Prix ACTUEL, facturé au client (FCFA)' : 'Prix (FCFA)';
+        });
+
+        document.getElementById('uploadVideoBtn').addEventListener('click', async () => {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const title = document.getElementById('videoTitleInput').value.trim();
+            const file = document.getElementById('videoFileInput').files[0];
+
+            if (!title || !file) {
+                alert('Titre et fichier vidéo requis');
+                return;
+            }
+
+            const btn = document.getElementById('uploadVideoBtn');
+            const originalHtml = btn.innerHTML;
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const progressText = document.getElementById('uploadProgressText');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upload...';
+            progressContainer.style.display = 'block';
+
+            try {
+                const token = await user.getIdToken();
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('file', file);
+
+                const result = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', `${API_URL}/api/courses/admin/upload-video`);
+                    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = percent + '%';
+                            progressText.textContent = percent + '%';
+                        }
+                    };
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+                        else reject(new Error(JSON.parse(xhr.responseText).error || 'Erreur upload'));
+                    };
+                    xhr.onerror = () => reject(new Error('Erreur réseau'));
+                    xhr.send(formData);
+                });
+
+                pendingVideos.push(result);
+                renderPendingVideos();
+                document.getElementById('videoTitleInput').value = '';
+                document.getElementById('videoFileInput').value = '';
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                progressContainer.style.display = 'none';
+            }
+        });
+
+        function renderPendingVideos() {
+            const container = document.getElementById('pendingVideosList');
+            if (pendingVideos.length === 0) {
+                container.innerHTML = '<p style="color:#4d6f94;">Aucune vidéo uploadée pour le moment.</p>';
+                return;
+            }
+            container.innerHTML = pendingVideos.map((v, i) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e2ebf6; border-radius:0.8rem; padding:0.6rem 1rem; margin-bottom:0.4rem;">
+                    <span>${i + 1}. ${v.title}</span>
+                    <button onclick="removePendingVideo(${i})" class="btn btn-danger btn-sm"><i class="fas fa-times"></i></button>
+                </div>
+            `).join('');
+        }
+
+        window.removePendingVideo = function(index) {
+            pendingVideos.splice(index, 1);
+            renderPendingVideos();
+        };
+
+        document.getElementById('courseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+
+            const errorDiv = document.getElementById('courseFormError');
+            errorDiv.style.display = 'none';
+
+            if (pendingVideos.length === 0) {
+                errorDiv.textContent = '⚠️ Uploade au moins une vidéo avant de créer la formation.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const title = document.getElementById('courseTitle').value.trim();
+            const description = document.getElementById('courseDescription').value.trim();
+            const priceType = document.getElementById('coursePriceType').value;
+            const price = parseFloat(document.getElementById('coursePrice').value) || 0;
+            const promoEnabled = document.getElementById('coursePromoEnabled').checked;
+            const originalPrice = parseFloat(document.getElementById('courseOriginalPrice').value);
+
+            if (priceType === 'paid' && promoEnabled && (isNaN(originalPrice) || originalPrice <= price)) {
+                errorDiv.textContent = '⚠️ Le prix normal doit être supérieur au prix promo.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const token = await user.getIdToken();
+                const response = await fetch(`${API_URL}/api/courses/admin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({
+                        title, description, priceType, price,
+                        promoEnabled: priceType === 'paid' && promoEnabled,
+                        originalPrice: priceType === 'paid' && promoEnabled ? originalPrice : null,
+                        videos: pendingVideos,
+                    })
+                });
+
+                if (!response.ok) throw new Error((await response.json()).error);
+
+                alert('✅ Formation créée avec succès');
+                document.getElementById('courseForm').reset();
+                pendingVideos = [];
+                renderPendingVideos();
+                loadCourses(token);
+            } catch (error) {
+                errorDiv.textContent = '❌ ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        async function loadCourses(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/courses`);
+                const courses = await response.json();
+                const container = document.getElementById('coursesList');
+
+                if (courses.length === 0) {
+                    container.innerHTML = '<p style="color:#4d6f94;">Aucune formation créée.</p>';
+                    return;
+                }
+
+                container.innerHTML = courses.map(c => `
+                    <div style="background:white; border-radius:1rem; padding:1.2rem; margin-bottom:1rem; border:1px solid #e2ebf6; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong>${c.title}</strong>
+                            <span style="color:#4d6f94; font-size:0.9rem; margin-left:1rem;">${c.videoCount} vidéo(s) · ${c.priceType === 'free' ? 'Gratuit' : c.price + ' FCFA'}</span>
+                        </div>
+                        <button onclick="deleteCourse('${c.id}')" class="btn btn-danger btn-sm"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        window.deleteCourse = async function(id) {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+            if (!confirm('Supprimer cette formation ? Les inscriptions existantes resteront orphelines.')) return;
+
+            try {
+                const token = await user.getIdToken();
+                await fetch(`${API_URL}/api/courses/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                loadCourses(token);
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        };
+    </script>
+</body>
+</html>

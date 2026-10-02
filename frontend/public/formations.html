@@ -34,6 +34,17 @@
                     <p style="margin-top:0.5rem;">Chargement des sessions...</p>
                 </div>
             </div>
+
+            <h2 style="margin-top:3rem;">📹 Formations vidéo à la demande</h2>
+            <p style="color:#3e6188; margin-bottom:1.5rem;">
+                Suivez à votre rythme, obtenez un certificat une fois la formation terminée.
+                <span id="loginHint" style="color:#7b95b5;"></span>
+            </p>
+            <div id="coursesGrid" class="grid">
+                <div style="grid-column:1/-1; text-align:center; padding:2rem; color:#4d6f94;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -84,8 +95,88 @@
         </div>
     </footer>
 
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script>
         const API_URL = 'https://epistrategix-backend.onrender.com';
+        const firebaseConfig = {
+            apiKey: "AIzaSyBOSqW6uNLITd-ojr9GL_pUwILXRQ6Q-d0",
+            authDomain: "epistrategix.firebaseapp.com",
+            projectId: "epistrategix",
+            storageBucket: "epistrategix.firebasestorage.app",
+            messagingSenderId: "469383955380",
+            appId: "1:469383955380:web:b9166a029f49eb5d8468e1"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+        let currentUser = null;
+        firebase.auth().onAuthStateChanged(user => {
+            currentUser = user;
+            document.getElementById('loginHint').textContent = user ? '' : '(connexion requise pour s\'inscrire)';
+            loadCourses();
+        });
+
+        function loadCourses() {
+            fetch(`${API_URL}/api/courses`)
+                .then(res => res.json())
+                .then(courses => {
+                    const container = document.getElementById('coursesGrid');
+                    if (courses.length === 0) {
+                        container.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:#4d6f94;">Aucune formation vidéo disponible pour le moment.</p>';
+                        return;
+                    }
+                    container.innerHTML = courses.map(c => {
+                        const priceHtml = c.priceType === 'free'
+                            ? '📄 Gratuit'
+                            : (c.promoEnabled
+                                ? `<span style="text-decoration:line-through; color:#7b95b5; font-size:0.75em;">${c.originalPrice} FCFA</span> <span style="color:#c73b3b;">${c.price} FCFA</span>`
+                                : `💰 ${c.price} FCFA`);
+                        return `
+                            <div class="content-card">
+                                <h3>${c.title}</h3>
+                                <p style="color:#4d6f94; font-size:0.9rem;">${c.videoCount} vidéo(s)</p>
+                                ${c.description ? `<p style="color:#3e6188; font-size:0.9rem;">${c.description}</p>` : ''}
+                                <p style="font-size:1.2rem; font-weight:700; color:#1e5fb0;">${priceHtml}</p>
+                                <button class="btn btn-success" style="width:100%; justify-content:center;" onclick="enrollInCourse('${c.id}')">
+                                    <i class="fas fa-play-circle"></i> S'inscrire
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                });
+        }
+
+        window.enrollInCourse = async function(courseId) {
+            if (!currentUser) {
+                if (confirm('Vous devez créer un compte ou vous connecter pour vous inscrire. Continuer ?')) {
+                    window.location.href = 'connexion.html';
+                }
+                return;
+            }
+
+            try {
+                const token = await currentUser.getIdToken();
+                const response = await fetch(`${API_URL}/api/courses/purchase`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ courseId })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert('❌ ' + (data.error || 'Erreur lors de l\'inscription'));
+                    return;
+                }
+
+                if (data.free) {
+                    window.location.href = 'mon-compte.html?enrollment=success';
+                } else {
+                    window.location.href = data.url;
+                }
+            } catch (error) {
+                alert('❌ Erreur réseau, veuillez réessayer.');
+            }
+        };
         let currentSessionId = null;
 
         function escapeHtml(text) {
@@ -209,8 +300,22 @@
 
                 const data = await response.json();
 
-                if (!response.ok || !data.url) {
-                    alert('❌ Erreur: ' + (data.error || 'Impossible d\'initier le paiement'));
+                if (!response.ok) {
+                    alert('❌ Erreur: ' + (data.error || 'Impossible de finaliser l\'inscription'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    return;
+                }
+
+                // ✅ Session gratuite : pas de paiement, redirection directe
+                // vers la page de confirmation (même page que pour un paiement).
+                if (data.free) {
+                    window.location.href = `confirmation.html?status=success&type=session&transaction=${data.transactionId}`;
+                    return;
+                }
+
+                if (!data.url) {
+                    alert('❌ Erreur: URL de paiement manquante');
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
                     return;
