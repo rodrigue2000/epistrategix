@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Réservation - EpiStrategix</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/nav-mobile.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- ✅ Le SDK FedaPay checkout.js n'est plus nécessaire :
          le paiement se fait maintenant par redirection vers l'URL générée par le backend -->
@@ -13,7 +14,10 @@
     <header>
         <div class="container">
             <h1><i class="fas fa-user-tie"></i> EpiStrategix</h1>
-            <nav>
+            <button class="nav-toggle" id="navToggle" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <nav id="mainNav">
                 <a href="index.html">Accueil</a>
                 <a href="reservation.html">Réserver</a>
                 <a href="bibliotheque.html">Bibliothèque</a>
@@ -152,5 +156,6 @@
     </footer>
 
     <script src="js/reservation.js"></script>
+    <script src="js/nav-toggle.js"></script>
 </body>
 </html>

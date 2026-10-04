@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion des contenus - Admin</title>
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/nav-mobile.css">
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
@@ -12,7 +13,10 @@
     <header>
         <div class="container">
             <h1>Gestion des contenus</h1>
-            <nav>
+            <button class="nav-toggle" id="navToggle" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <nav id="mainNav">
                 <a href="dashboard.html">KPI</a>
                 <a href="services.html">Services</a>
                 <a href="calendrier.html">Calendrier</a>
@@ -1060,5 +1064,6 @@
             }
         });
     </script>
+    <script src="../js/nav-toggle.js"></script>
 </body>
 </html>

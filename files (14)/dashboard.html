@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Admin</title>
     <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/nav-mobile.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -13,11 +14,16 @@
     <header>
         <div class="container">
             <h1>Admin Dashboard</h1>
-            <nav>
+            <button class="nav-toggle" id="navToggle" aria-label="Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <nav id="mainNav">
                 <a href="dashboard.html">KPI</a>
                 <a href="services.html">Services</a>
                 <a href="calendrier.html">Calendrier</a>
                 <a href="contenus.html">Contenus</a>
+                <a href="sessions-admin.html">Formations</a>
+                <a href="cours-admin.html">Formations vidéo</a>
                 <button id="logoutBtn" class="btn btn-outline btn-sm">Déconnexion</button>
             </nav>
         </div>
@@ -96,5 +102,6 @@
         </div>
     </div>
     <script src="../js/admin.js"></script>
+    <script src="../js/nav-toggle.js"></script>
 </body>
 </html>
