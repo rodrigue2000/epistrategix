@@ -6,20 +6,20 @@ const verifyToken = require('../middleware/auth');
 const isAdmin = require('../middleware/admin');
 const fedapay = require('../config/fedapay');
 const { paymentLimiter } = require('../middleware/rateLimiter');
+const { issueAutoCertificate } = require('./certificates');
 
 const router = express.Router();
 const upload = multer({
   dest: 'uploads/',
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 Mo — les vidéos sont plus lourdes que les PDF
+  limits: { fileSize: 500 * 1024 * 1024 },
 });
 
-// ✅ Les vidéos sont uploadées en type "authenticated" : impossible d'y accéder
-// via une URL directe, seule une URL signée à expiration courte (générée à
-// la demande) permet la lecture. C'est la brique technique qui rend les
-// vidéos "non téléchargeables" — dissuasif sérieux, pas un DRM absolu.
-function buildVideoUploadOptions(originalname) {
+// ✅ "video" → resource_type vidéo ; "document" (PDF) → resource_type image
+// (Cloudinary traite les PDF comme des images paginées). Les deux sont
+// uploadés en type "authenticated" : accès uniquement via URL signée.
+function buildModuleUploadOptions(originalname, moduleType) {
   return {
-    resource_type: 'video',
+    resource_type: moduleType === 'video' ? 'video' : 'image',
     type: 'authenticated',
     folder: 'epistrategix/courses',
     use_filename: true,
@@ -28,18 +28,18 @@ function buildVideoUploadOptions(originalname) {
   };
 }
 
-function getSignedVideoUrl(publicId) {
+function getSignedModuleUrl(publicId, moduleType) {
   return cloudinary.url(publicId, {
-    resource_type: 'video',
+    resource_type: moduleType === 'video' ? 'video' : 'image',
     type: 'authenticated',
     sign_url: true,
     secure: true,
-    expires_at: Math.floor(Date.now() / 1000) + 15 * 60, // 15 minutes
+    expires_at: Math.floor(Date.now() / 1000) + 15 * 60,
   });
 }
 
 // ============================================================
-// 1. LISTER LES FORMATIONS (public) - infos limitées, sans les vidéos
+// 1. LISTER LES FORMATIONS (public)
 // ============================================================
 router.get('/', async (req, res) => {
   try {
@@ -55,7 +55,8 @@ router.get('/', async (req, res) => {
         price: c.price,
         promoEnabled: c.promoEnabled,
         originalPrice: c.originalPrice,
-        videoCount: (c.videos || []).length,
+        certifying: !!c.certifying,
+        moduleCount: (c.modules || []).length,
       });
     });
     res.json(courses);
@@ -65,13 +66,13 @@ router.get('/', async (req, res) => {
 });
 
 // ============================================================
-// 2. UPLOADER UNE VIDÉO (admin uniquement) - à faire avant de créer/éditer une formation
+// 2. UPLOADER UN MODULE (vidéo ou document) - admin uniquement
 // ============================================================
-router.post('/admin/upload-video', verifyToken, isAdmin, (req, res, next) => {
+router.post('/admin/upload-module', verifyToken, isAdmin, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'Vidéo trop volumineuse (maximum 500 Mo)' });
+        return res.status(413).json({ error: 'Fichier trop volumineux (maximum 500 Mo)' });
       }
       return res.status(400).json({ error: err.message });
     }
@@ -79,22 +80,24 @@ router.post('/admin/upload-video', verifyToken, isAdmin, (req, res, next) => {
   });
 }, async (req, res) => {
   const file = req.file;
-  const { title } = req.body;
+  const { title, moduleType } = req.body; // moduleType: 'video' | 'document'
 
-  if (!file || !title) {
-    return res.status(400).json({ error: 'Titre et fichier vidéo requis' });
+  if (!file || !title || !moduleType) {
+    return res.status(400).json({ error: 'Titre, type de module et fichier requis' });
   }
 
   try {
-    const result = await cloudinary.uploader.upload(file.path, buildVideoUploadOptions(file.originalname));
+    const result = await cloudinary.uploader.upload(file.path, buildModuleUploadOptions(file.originalname, moduleType));
     res.status(201).json({
       title,
+      type: moduleType,
       publicId: result.public_id,
       duration: result.duration || null,
+      pageCount: result.pages || null,
     });
   } catch (error) {
-    console.error('Erreur upload vidéo:', error);
-    res.status(500).json({ error: 'Erreur lors de l\'upload de la vidéo' });
+    console.error('Erreur upload module:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'upload du module' });
   }
 });
 
@@ -102,10 +105,10 @@ router.post('/admin/upload-video', verifyToken, isAdmin, (req, res, next) => {
 // 3. CRÉER UNE FORMATION (admin uniquement)
 // ============================================================
 router.post('/admin', verifyToken, isAdmin, async (req, res) => {
-  const { title, description, priceType, price, promoEnabled, originalPrice, videos } = req.body;
+  const { title, description, priceType, price, promoEnabled, originalPrice, certifying, modules } = req.body;
 
-  if (!title || !Array.isArray(videos) || videos.length === 0) {
-    return res.status(400).json({ error: 'Titre et au moins une vidéo requis' });
+  if (!title || !Array.isArray(modules) || modules.length === 0) {
+    return res.status(400).json({ error: 'Titre et au moins un module requis' });
   }
 
   if (promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
@@ -120,7 +123,8 @@ router.post('/admin', verifyToken, isAdmin, async (req, res) => {
       price: priceType === 'free' ? 0 : parseFloat(price),
       promoEnabled: priceType === 'paid' && !!promoEnabled,
       originalPrice: priceType === 'paid' && promoEnabled ? parseFloat(originalPrice) : null,
-      videos: videos.map((v, i) => ({ ...v, order: i })),
+      certifying: !!certifying,
+      modules: modules.map((m, i) => ({ ...m, order: i })),
       createdAt: new Date().toISOString(),
     };
 
@@ -132,11 +136,11 @@ router.post('/admin', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============================================================
-// 4. MODIFIER UNE FORMATION (admin uniquement)
+// 4. MODIFIER UNE FORMATION (admin uniquement) - métadonnées + modules
 // ============================================================
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, description, priceType, price, promoEnabled, originalPrice, videos } = req.body;
+  const { title, description, priceType, price, promoEnabled, originalPrice, certifying, modules } = req.body;
 
   if (priceType === 'paid' && promoEnabled && (!originalPrice || parseFloat(originalPrice) <= parseFloat(price))) {
     return res.status(400).json({ error: 'Le prix normal doit être supérieur au prix promo' });
@@ -150,7 +154,10 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (priceType !== undefined) updates.priceType = priceType;
-    if (Array.isArray(videos)) updates.videos = videos.map((v, i) => ({ ...v, order: i }));
+    if (certifying !== undefined) updates.certifying = !!certifying;
+    if (Array.isArray(modules) && modules.length > 0) {
+      updates.modules = modules.map((m, i) => ({ ...m, order: i }));
+    }
 
     if (priceType === 'free') {
       updates.price = 0;
@@ -170,7 +177,20 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============================================================
-// 5. SUPPRIMER UNE FORMATION (admin uniquement)
+// 5. RÉCUPÉRER UNE FORMATION (admin uniquement) - pour pré-remplir l'édition
+// ============================================================
+router.get('/admin/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const doc = await db.collection('courses').doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Formation non trouvée' });
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// 6. SUPPRIMER UNE FORMATION (admin uniquement)
 // ============================================================
 router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   const { id } = req.params;
@@ -185,42 +205,32 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============================================================
-// 6. ACHETER / S'INSCRIRE À UNE FORMATION (client connecté requis)
+// 7. ACHETER / S'INSCRIRE À UNE FORMATION (client connecté requis)
 // ============================================================
 router.post('/purchase', verifyToken, paymentLimiter, async (req, res) => {
   const { courseId } = req.body;
   const clientUid = req.user.uid;
   const clientEmail = req.user.email;
 
-  if (!courseId) {
-    return res.status(400).json({ error: 'ID de la formation requis' });
-  }
+  if (!courseId) return res.status(400).json({ error: 'ID de la formation requis' });
 
   try {
     const courseDoc = await db.collection('courses').doc(courseId).get();
-    if (!courseDoc.exists) {
-      return res.status(404).json({ error: 'Formation non trouvée' });
-    }
+    if (!courseDoc.exists) return res.status(404).json({ error: 'Formation non trouvée' });
     const course = courseDoc.data();
 
     const existing = await db.collection('enrollments')
       .where('courseId', '==', courseId)
       .where('clientUid', '==', clientUid)
       .get();
-    if (!existing.empty) {
-      return res.status(400).json({ error: 'Vous êtes déjà inscrit à cette formation' });
-    }
+    if (!existing.empty) return res.status(400).json({ error: 'Vous êtes déjà inscrit à cette formation' });
 
     const amount = course.price;
 
     if (amount <= 0) {
       await db.collection('enrollments').add({
-        courseId,
-        courseTitle: course.title,
-        clientUid,
-        clientEmail,
-        enrolledAt: new Date().toISOString(),
-        completed: false,
+        courseId, courseTitle: course.title, clientUid, clientEmail,
+        enrolledAt: new Date().toISOString(), completed: false,
       });
       return res.json({ success: true, free: true });
     }
@@ -231,12 +241,7 @@ router.post('/purchase', verifyToken, paymentLimiter, async (req, res) => {
       description: `Inscription à la formation : ${course.title}`,
       customer: { email: clientEmail, name: clientEmail },
       callback_url: `${process.env.BASE_URL}/api/courses/callback`,
-      custom_metadata: {
-        courseId,
-        contentType: 'course_purchase',
-        courseTitle: course.title,
-        clientUid,
-      },
+      custom_metadata: { courseId, contentType: 'course_purchase', courseTitle: course.title, clientUid },
     });
 
     const transaction = response.data['v1/transaction'] || response.data;
@@ -247,15 +252,9 @@ router.post('/purchase', verifyToken, paymentLimiter, async (req, res) => {
     if (!paymentUrl) throw new Error('Impossible de générer le lien de paiement FedaPay');
 
     await db.collection('transactions').doc(transactionId).set({
-      courseId,
-      courseTitle: course.title,
-      clientUid,
-      customerEmail: clientEmail,
-      amount,
-      status: transaction.status || 'pending',
-      fedapayTransaction: transaction,
-      paymentUrl,
-      createdAt: new Date().toISOString(),
+      courseId, courseTitle: course.title, clientUid, customerEmail: clientEmail,
+      amount, status: transaction.status || 'pending', fedapayTransaction: transaction,
+      paymentUrl, createdAt: new Date().toISOString(),
     });
 
     res.json({ success: true, url: paymentUrl });
@@ -266,13 +265,12 @@ router.post('/purchase', verifyToken, paymentLimiter, async (req, res) => {
 });
 
 router.get('/callback', (req, res) => {
-  const { status } = req.query;
-  const ok = status === 'success' || status === 'approved';
+  const ok = req.query.status === 'success' || req.query.status === 'approved';
   res.redirect(`${process.env.FRONTEND_URL}/mon-compte.html?enrollment=${ok ? 'success' : 'failed'}`);
 });
 
 // ============================================================
-// 7. MES FORMATIONS (client connecté) - avec progression
+// 8. MES FORMATIONS (client connecté) - avec progression
 // ============================================================
 router.get('/my-courses', verifyToken, async (req, res) => {
   try {
@@ -286,18 +284,17 @@ router.get('/my-courses', verifyToken, async (req, res) => {
       if (!courseDoc.exists) continue;
       const course = courseDoc.data();
 
-      const progressSnap = await db.collection('video_progress')
+      const progressSnap = await db.collection('module_progress')
         .where('clientUid', '==', clientUid)
         .where('courseId', '==', enrollment.courseId)
         .get();
-      const completedVideoIds = progressSnap.docs.map(d => d.data().videoId);
 
       results.push({
         enrollmentId: doc.id,
         courseId: enrollment.courseId,
         courseTitle: course.title,
-        totalVideos: (course.videos || []).length,
-        completedVideos: completedVideoIds.length,
+        totalModules: (course.modules || []).length,
+        completedModules: progressSnap.size,
         completed: !!enrollment.completed,
       });
     }
@@ -309,93 +306,90 @@ router.get('/my-courses', verifyToken, async (req, res) => {
 });
 
 // ============================================================
-// 8. RÉCUPÉRER LES VIDÉOS D'UNE FORMATION (client inscrit uniquement)
+// 9. RÉCUPÉRER LES MODULES D'UNE FORMATION (client inscrit uniquement)
 // ============================================================
-router.get('/:id/videos', verifyToken, async (req, res) => {
+router.get('/:id/modules', verifyToken, async (req, res) => {
   const { id } = req.params;
   const clientUid = req.user.uid;
 
   try {
     const enrollSnap = await db.collection('enrollments')
-      .where('courseId', '==', id)
-      .where('clientUid', '==', clientUid)
-      .get();
-    if (enrollSnap.empty) {
-      return res.status(403).json({ error: 'Vous n\'êtes pas inscrit à cette formation' });
-    }
+      .where('courseId', '==', id).where('clientUid', '==', clientUid).get();
+    if (enrollSnap.empty) return res.status(403).json({ error: 'Vous n\'êtes pas inscrit à cette formation' });
 
     const courseDoc = await db.collection('courses').doc(id).get();
     if (!courseDoc.exists) return res.status(404).json({ error: 'Formation non trouvée' });
     const course = courseDoc.data();
 
-    const progressSnap = await db.collection('video_progress')
-      .where('clientUid', '==', clientUid)
-      .where('courseId', '==', id)
-      .get();
-    const completedVideoIds = new Set(progressSnap.docs.map(d => d.data().videoId));
+    const progressSnap = await db.collection('module_progress')
+      .where('clientUid', '==', clientUid).where('courseId', '==', id).get();
+    const completedIds = new Set(progressSnap.docs.map(d => d.data().moduleId));
 
-    const videos = (course.videos || [])
+    const modules = (course.modules || [])
       .sort((a, b) => a.order - b.order)
-      .map(v => ({
-        publicId: v.publicId,
-        title: v.title,
-        url: getSignedVideoUrl(v.publicId),
-        completed: completedVideoIds.has(v.publicId),
+      .map(m => ({
+        publicId: m.publicId,
+        title: m.title,
+        type: m.type || 'video',
+        url: getSignedModuleUrl(m.publicId, m.type),
+        completed: completedIds.has(m.publicId),
       }));
 
-    res.json({ courseTitle: course.title, videos });
+    res.json({ courseTitle: course.title, modules });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// 9. MARQUER UNE VIDÉO COMME TERMINÉE (client inscrit)
+// 10. MARQUER UN MODULE COMME TERMINÉ (client inscrit)
 // ============================================================
-router.post('/:id/videos/complete', verifyToken, async (req, res) => {
+router.post('/:id/modules/complete', verifyToken, async (req, res) => {
   const { id } = req.params;
   const clientUid = req.user.uid;
   const { publicId } = req.body;
 
-  if (!publicId) {
-    return res.status(400).json({ error: 'publicId de la vidéo requis' });
-  }
+  if (!publicId) return res.status(400).json({ error: 'publicId du module requis' });
 
   try {
     const enrollSnap = await db.collection('enrollments')
-      .where('courseId', '==', id)
-      .where('clientUid', '==', clientUid)
-      .get();
-    if (enrollSnap.empty) {
-      return res.status(403).json({ error: 'Vous n\'êtes pas inscrit à cette formation' });
-    }
+      .where('courseId', '==', id).where('clientUid', '==', clientUid).get();
+    if (enrollSnap.empty) return res.status(403).json({ error: 'Vous n\'êtes pas inscrit à cette formation' });
     const enrollmentDoc = enrollSnap.docs[0];
 
     const progressId = `${clientUid}_${id}_${publicId}`.replace(/\//g, '-');
-    await db.collection('video_progress').doc(progressId).set({
-      clientUid,
-      courseId: id,
-      videoId: publicId,
-      completedAt: new Date().toISOString(),
+    await db.collection('module_progress').doc(progressId).set({
+      clientUid, courseId: id, moduleId: publicId, completedAt: new Date().toISOString(),
     });
 
     const courseDoc = await db.collection('courses').doc(id).get();
     const course = courseDoc.data();
-    const progressSnap = await db.collection('video_progress')
-      .where('clientUid', '==', clientUid)
-      .where('courseId', '==', id)
-      .get();
+    const progressSnap = await db.collection('module_progress')
+      .where('clientUid', '==', clientUid).where('courseId', '==', id).get();
 
-    const allCompleted = (course.videos || []).length > 0 &&
-      progressSnap.size >= (course.videos || []).length;
+    const allCompleted = (course.modules || []).length > 0 &&
+      progressSnap.size >= (course.modules || []).length;
 
+    let certificateIssued = false;
     if (allCompleted && !enrollmentDoc.data().completed) {
       await db.collection('enrollments').doc(enrollmentDoc.id).update({ completed: true });
-      // 🔜 Phase 2 : c'est ici que la génération automatique du certificat sera déclenchée.
-      console.log(`🎓 Formation ${id} terminée par ${clientUid} — certificat à générer (phase 2)`);
+
+      if (course.certifying) {
+        try {
+          await issueAutoCertificate({
+            clientUid,
+            clientEmail: req.user.email,
+            courseId: id,
+            courseTitle: course.title,
+          });
+          certificateIssued = true;
+        } catch (certError) {
+          console.error('❌ Erreur génération certificat auto:', certError);
+        }
+      }
     }
 
-    res.json({ success: true, courseCompleted: allCompleted });
+    res.json({ success: true, courseCompleted: allCompleted, certificateIssued });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
