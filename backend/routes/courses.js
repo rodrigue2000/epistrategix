@@ -6,7 +6,7 @@ const verifyToken = require('../middleware/auth');
 const isAdmin = require('../middleware/admin');
 const fedapay = require('../config/fedapay');
 const { paymentLimiter } = require('../middleware/rateLimiter');
-const { issueAutoCertificate } = require('./certificates');
+const { issueAutoCertificate, getMemberProfile, isProfileComplete } = require('./certificates');
 
 const router = express.Router();
 const upload = multer({
@@ -219,6 +219,18 @@ router.post('/purchase', verifyToken, paymentLimiter, async (req, res) => {
     if (!courseDoc.exists) return res.status(404).json({ error: 'Formation non trouvée' });
     const course = courseDoc.data();
 
+    // ✅ Une formation certifiante délivre un certificat nominatif : il faut
+    // connaître l'identité complète du membre AVANT qu'il s'inscrive.
+    if (course.certifying) {
+      const profile = await getMemberProfile(clientUid);
+      if (!isProfileComplete(profile)) {
+        return res.status(400).json({
+          error: 'Cette formation délivre un certificat : complétez d\'abord votre profil (nom, prénom, date et lieu de naissance).',
+          code: 'PROFILE_INCOMPLETE',
+        });
+      }
+    }
+
     const existing = await db.collection('enrollments')
       .where('courseId', '==', courseId)
       .where('clientUid', '==', clientUid)
@@ -296,6 +308,8 @@ router.get('/my-courses', verifyToken, async (req, res) => {
         totalModules: (course.modules || []).length,
         completedModules: progressSnap.size,
         completed: !!enrollment.completed,
+        certifying: !!course.certifying,
+        certificatePending: !!enrollment.certificatePending,
       });
     }
 
@@ -371,25 +385,43 @@ router.post('/:id/modules/complete', verifyToken, async (req, res) => {
       progressSnap.size >= (course.modules || []).length;
 
     let certificateIssued = false;
+    let certificatePending = false;
+    let profileIncomplete = false;
+
     if (allCompleted && !enrollmentDoc.data().completed) {
-      await db.collection('enrollments').doc(enrollmentDoc.id).update({ completed: true });
+      const enrollmentRef = db.collection('enrollments').doc(enrollmentDoc.id);
+      await enrollmentRef.update({ completed: true });
 
       if (course.certifying) {
         try {
-          await issueAutoCertificate({
+          const code = await issueAutoCertificate({
             clientUid,
             clientEmail: req.user.email,
             courseId: id,
             courseTitle: course.title,
           });
+          await enrollmentRef.update({ certificateCode: code, certificatePending: false });
           certificateIssued = true;
         } catch (certError) {
-          console.error('❌ Erreur génération certificat auto:', certError);
+          // ✅ Le certificat n'est jamais perdu : il est mis "en attente" et
+          // sera émis automatiquement dès que le profil du membre sera complet.
+          certificatePending = true;
+          profileIncomplete = certError.code === 'PROFILE_INCOMPLETE';
+          await enrollmentRef.update({ certificatePending: true });
+          if (!profileIncomplete) {
+            console.error('❌ Erreur génération certificat auto:', certError);
+          }
         }
       }
     }
 
-    res.json({ success: true, courseCompleted: allCompleted, certificateIssued });
+    res.json({
+      success: true,
+      courseCompleted: allCompleted,
+      certificateIssued,
+      certificatePending,
+      profileIncomplete,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
