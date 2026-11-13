@@ -18,7 +18,7 @@ const imageUpload = multer({
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return cb(null, true);
-    cb(new Error('Format d\'image non supporté (JPG, PNG ou WebP uniquement)'));
+    cb(new Error('Format d\'image non supporté (JPG ou PNG)'));
   },
 }).fields([
   { name: 'signature', maxCount: 1 },
@@ -40,28 +40,30 @@ function handleImageUpload(req, res, next) {
 // ============================================================
 // CADRAGE AUTOMATIQUE D'UNE SIGNATURE / D'UN CACHET PHOTOGRAPHIÉ
 // ============================================================
-// ✅ "sharp" est chargé à la demande : s'il manque ou ne se charge pas sur le serveur, seules
-// les routes qui traitent des images échouent (avec la VRAIE cause), pas tout le site.
-function describeSharpFailure(e) {
+// ✅ Traitement 100 % JavaScript (modules "jpeg-js" et "pngjs") : aucun composant natif,
+// donc aucun risque de « module impossible à charger » selon la machine du serveur.
+// Ils sont chargés à la demande : s'ils manquaient, seules les routes qui traitent des
+// images échoueraient (avec la VRAIE cause), pas tout le site.
+function describeImageLibFailure(e) {
   const raw = String((e && e.message) || e || '');
   const firstLine = raw.split('\n').find(l => l.trim()) || raw;
-  const absent = e && e.code === 'MODULE_NOT_FOUND' && /Cannot find module 'sharp'/.test(raw);
+  const absent = e && e.code === 'MODULE_NOT_FOUND';
   return absent
-    ? 'Le module "sharp" est absent du serveur : il n\'a pas été installé au déploiement. Vérifiez que backend/package.json et backend/package-lock.json (contenant sharp) ont bien été envoyés sur GitHub, puis relancez un déploiement.'
-    : `Le module "sharp" est présent mais ne peut pas se charger sur ce serveur (${firstLine.slice(0, 200)}). Sur Render : Manual Deploy → « Clear build cache & deploy ».`;
+    ? 'Les modules "jpeg-js" et "pngjs" sont absents du serveur : ils n\'ont pas été installés au déploiement. Vérifiez que backend/package.json et backend/package-lock.json (contenant jpeg-js et pngjs) ont bien été envoyés sur GitHub, puis relancez un déploiement.'
+    : `Les modules de traitement d'image ne peuvent pas se charger sur ce serveur (${firstLine.slice(0, 200)}).`;
 }
 
-let sharpLib = null;
-function getSharp() {
-  if (!sharpLib) {
+let imageLibs = null;
+function getImageLibs() {
+  if (!imageLibs) {
     try {
-      sharpLib = require('sharp');
+      imageLibs = { PNG: require('pngjs').PNG, jpeg: require('jpeg-js') };
     } catch (e) {
-      console.error(`❌ Chargement de sharp impossible (Node ${process.version}) : code=${e && e.code} | ${String(e && e.message).split('\n').slice(0, 3).join(' / ')}`);
-      throw new Error(describeSharpFailure(e));
+      console.error(`❌ Chargement des modules d'image impossible (Node ${process.version}) : code=${e && e.code} | ${String(e && e.message).split('\n').slice(0, 3).join(' / ')}`);
+      throw new Error(describeImageLibFailure(e));
     }
   }
-  return sharpLib;
+  return imageLibs;
 }
 
 // Erreur causée par les données envoyées (et non par le serveur) : renvoyée en 400
@@ -71,64 +73,227 @@ function userError(message) {
   return err;
 }
 
-async function frameImage(buffer) {
-  const sharp = getSharp();
-
-  // 1. Orientation EXIF (photos de téléphone), fond blanc, taille de travail raisonnable
-  let data, info;
+// Orientation EXIF d'une photo JPEG de téléphone (1 = normale). Sans cette lecture,
+// une photo prise en mode portrait donnerait une signature couchée.
+function jpegOrientation(buf) {
   try {
-    ({ data, info } = await sharp(buffer, { failOn: 'none' })
-      .rotate()
-      .flatten({ background: '#ffffff' })
-      .resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true })
-      .removeAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true }));
-  } catch (e) {
-    throw userError('Image illisible ou corrompue. Utilisez une photo JPG, PNG ou WebP.');
-  }
-  const { width, height } = info;
+    let off = 2;
+    while (off + 4 < buf.length && buf[off] === 0xFF) {
+      const marker = buf[off + 1];
+      const len = buf.readUInt16BE(off + 2);
+      if (marker === 0xE1 && buf.toString('latin1', off + 4, off + 10) === 'Exif\0\0') {
+        const t = off + 10; // début de l'en-tête TIFF
+        const little = buf.toString('latin1', t, t + 2) === 'II';
+        const u16 = (o) => (little ? buf.readUInt16LE(o) : buf.readUInt16BE(o));
+        const u32 = (o) => (little ? buf.readUInt32LE(o) : buf.readUInt32BE(o));
+        const ifd = t + u32(t + 4);
+        const count = u16(ifd);
+        for (let i = 0; i < count; i++) {
+          const entry = ifd + 2 + i * 12;
+          if (u16(entry) === 0x0112) return u16(entry + 8);
+        }
+        return 1;
+      }
+      if (marker === 0xDA) break; // début des données image : plus de métadonnées
+      off += 2 + len;
+    }
+  } catch (e) { /* métadonnées illisibles : on considère l'image droite */ }
+  return 1;
+}
 
-  // 2. Estimation LOCALE du fond : filtre médian sur une version réduite. Les traits fins
+// Remet une image RGB « à l'endroit » selon son orientation EXIF
+function applyOrientation(img, o) {
+  if (!(o >= 2 && o <= 8)) return img;
+  const { data, width: w, height: h } = img;
+  const swap = o >= 5;
+  const nw = swap ? h : w;
+  const nh = swap ? w : h;
+  const out = new Uint8Array(data.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let dx, dy;
+      switch (o) {
+        case 2: dx = w - 1 - x; dy = y; break;
+        case 3: dx = w - 1 - x; dy = h - 1 - y; break;
+        case 4: dx = x; dy = h - 1 - y; break;
+        case 5: dx = y; dy = x; break;
+        case 6: dx = h - 1 - y; dy = x; break;
+        case 7: dx = h - 1 - y; dy = w - 1 - x; break;
+        default: dx = y; dy = w - 1 - x; // 8
+      }
+      const s = (y * w + x) * 3;
+      const d = (dy * nw + dx) * 3;
+      out[d] = data[s]; out[d + 1] = data[s + 1]; out[d + 2] = data[s + 2];
+    }
+  }
+  return { data: out, width: nw, height: nh };
+}
+
+// Décode une photo JPEG ou PNG en RGB, aplatie sur fond blanc et remise à l'endroit
+function decodeToRgb(buffer) {
+  const { PNG, jpeg } = getImageLibs();
+  let width, height, rgba, orientation = 1;
+  try {
+    if (buffer[0] === 0x89 && buffer[1] === 0x50) {                 // PNG
+      const png = PNG.sync.read(buffer);
+      width = png.width; height = png.height; rgba = png.data;
+    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8) {          // JPEG
+      const img = jpeg.decode(buffer, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: 60, maxMemoryUsageInMB: 700 });
+      width = img.width; height = img.height; rgba = img.data;
+      orientation = jpegOrientation(buffer);
+    } else {
+      throw new Error('format non pris en charge');
+    }
+  } catch (e) {
+    throw userError('Image illisible ou format non pris en charge. Utilisez une photo JPG ou PNG.');
+  }
+
+  const rgb = new Uint8Array(width * height * 3);
+  for (let i = 0, p = 0, q = 0; i < width * height; i++, p += 4, q += 3) {
+    const a = rgba[p + 3] / 255;
+    rgb[q] = rgba[p] * a + 255 * (1 - a);
+    rgb[q + 1] = rgba[p + 1] * a + 255 * (1 - a);
+    rgb[q + 2] = rgba[p + 2] * a + 255 * (1 - a);
+  }
+  return applyOrientation({ data: rgb, width, height }, orientation);
+}
+
+// Réduction par moyenne de surface (la meilleure méthode pour réduire une photo)
+function boxResize(src, sw, sh, ch, tw, th) {
+  const dst = new Uint8Array(tw * th * ch);
+  for (let ty = 0; ty < th; ty++) {
+    const y0 = Math.floor((ty * sh) / th);
+    const y1 = Math.max(y0 + 1, Math.floor(((ty + 1) * sh) / th));
+    for (let tx = 0; tx < tw; tx++) {
+      const x0 = Math.floor((tx * sw) / tw);
+      const x1 = Math.max(x0 + 1, Math.floor(((tx + 1) * sw) / tw));
+      const area = (y1 - y0) * (x1 - x0);
+      for (let c = 0; c < ch; c++) {
+        let sum = 0;
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) sum += src[(y * sw + x) * ch + c];
+        }
+        dst[(ty * tw + tx) * ch + c] = sum / area;
+      }
+    }
+  }
+  return dst;
+}
+
+// Idem pour une image RGBA, en tenant compte de la transparence (sinon les bords noircissent)
+function boxResizeRgba(src, sw, sh, tw, th) {
+  const dst = new Uint8Array(tw * th * 4);
+  for (let ty = 0; ty < th; ty++) {
+    const y0 = Math.floor((ty * sh) / th);
+    const y1 = Math.max(y0 + 1, Math.floor(((ty + 1) * sh) / th));
+    for (let tx = 0; tx < tw; tx++) {
+      const x0 = Math.floor((tx * sw) / tw);
+      const x1 = Math.max(x0 + 1, Math.floor(((tx + 1) * sw) / tw));
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * sw + x) * 4;
+          const al = src[i + 3];
+          r += src[i] * al; g += src[i + 1] * al; b += src[i + 2] * al; a += al;
+        }
+      }
+      const o = (ty * tw + tx) * 4;
+      if (a > 0) {
+        dst[o] = r / a; dst[o + 1] = g / a; dst[o + 2] = b / a;
+        dst[o + 3] = a / ((y1 - y0) * (x1 - x0));
+      }
+    }
+  }
+  return dst;
+}
+
+// Filtre médian : sert à estimer le papier (fond) en effaçant les traits fins de l'encre
+function medianFilter(src, w, h, ch, radius) {
+  const size = 2 * radius + 1;
+  const win = new Uint8Array(size * size);
+  const dst = new Uint8Array(src.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      for (let c = 0; c < ch; c++) {
+        let n = 0;
+        for (let dy = -radius; dy <= radius; dy++) {
+          const yy = Math.min(h - 1, Math.max(0, y + dy));
+          for (let dx = -radius; dx <= radius; dx++) {
+            const xx = Math.min(w - 1, Math.max(0, x + dx));
+            win[n++] = src[(yy * w + xx) * ch + c];
+          }
+        }
+        win.sort();
+        dst[(y * w + x) * ch + c] = win[n >> 1];
+      }
+    }
+  }
+  return dst;
+}
+
+async function frameImage(buffer) {
+  const { PNG } = getImageLibs();
+
+  // 1. Décodage, orientation, fond blanc, taille de travail raisonnable (1400 px max)
+  let { data, width, height } = decodeToRgb(buffer);
+  const work = Math.min(1, 1400 / Math.max(width, height));
+  if (work < 1) {
+    const tw = Math.max(1, Math.round(width * work));
+    const th = Math.max(1, Math.round(height * work));
+    data = boxResize(data, width, height, 3, tw, th);
+    width = tw; height = th;
+  }
+
+  // 2. Estimation LOCALE du fond : médiane sur une version réduite (1/8). Les traits fins
   // (signature, cachet) disparaissent, il reste le papier avec ses ombres et son éclairage
-  // inégal. (Chaque étape est un traitement sharp distinct : sharp n'exécute pas les
-  // opérations dans l'ordre où on les écrit.)
-  const smallW = Math.max(16, Math.round(width / 4));
-  const smallH = Math.max(16, Math.round(height / 4));
-  const small = await sharp(data, { raw: { width, height, channels: 3 } })
-    .resize(smallW, smallH, { fit: 'fill' }).raw().toBuffer();
-  const smallMedian = await sharp(small, { raw: { width: smallW, height: smallH, channels: 3 } })
-    .median(15).raw().toBuffer();
-  const bg = await sharp(smallMedian, { raw: { width: smallW, height: smallH, channels: 3 } })
-    .resize(width, height, { fit: 'fill', kernel: 'cubic' }).raw().toBuffer();
+  // inégal, ce qui permet de traiter correctement une photo de téléphone.
+  const smallW = Math.max(16, Math.round(width / 8));
+  const smallH = Math.max(16, Math.round(height / 8));
+  const small = boxResize(data, width, height, 3, smallW, smallH);
+  const bgSmall = medianFilter(small, smallW, smallH, 3, 4);
+
+  // Interpolation bilinéaire du fond jusqu'à la taille de travail
+  const x0s = new Int32Array(width), x1s = new Int32Array(width), fxs = new Float32Array(width);
+  for (let x = 0; x < width; x++) {
+    const sx = Math.min(smallW - 1, Math.max(0, ((x + 0.5) * smallW) / width - 0.5));
+    x0s[x] = Math.floor(sx); x1s[x] = Math.min(smallW - 1, x0s[x] + 1); fxs[x] = sx - x0s[x];
+  }
 
   // 3. Suppression du fond : on ne garde que l'encre, sur transparent.
   //    pixel = encre × a + fond × (1 − a)   ⇒   encre = (pixel − fond × (1 − a)) / a
-  const out = Buffer.alloc(width * height * 4);
+  const out = new Uint8Array(width * height * 4);
   const colCount = new Uint32Array(width);
   const rowCount = new Uint32Array(height);
   const edge = Math.round(Math.min(width, height) * 0.02); // bords de photo ignorés (ombres, table)
-  const smooth = (x, e0, e1) => {
-    const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  const smooth = (v, e0, e1) => {
+    const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0)));
     return t * t * (3 - 2 * t);
   };
   const byte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const bg = [0, 0, 0];
   let solid = 0;
 
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (x < edge || y < edge || x >= width - edge || y >= height - edge) continue;
+    if (y < edge || y >= height - edge) continue;
+    const sy = Math.min(smallH - 1, Math.max(0, ((y + 0.5) * smallH) / height - 0.5));
+    const y0 = Math.floor(sy), y1 = Math.min(smallH - 1, y0 + 1), fy = sy - y0;
+    for (let x = edge; x < width - edge; x++) {
+      const x0 = x0s[x], x1 = x1s[x], fx = fxs[x];
+      for (let c = 0; c < 3; c++) {
+        const top = bgSmall[(y0 * smallW + x0) * 3 + c] * (1 - fx) + bgSmall[(y0 * smallW + x1) * 3 + c] * fx;
+        const bottom = bgSmall[(y1 * smallW + x0) * 3 + c] * (1 - fx) + bgSmall[(y1 * smallW + x1) * 3 + c] * fx;
+        bg[c] = Math.max(1, top * (1 - fy) + bottom * fy);
+      }
       const p = (y * width + x) * 3;
       const r = data[p], g = data[p + 1], b = data[p + 2];
-      const br = Math.max(bg[p], 1), bgg = Math.max(bg[p + 1], 1), bb = Math.max(bg[p + 2], 1);
       // assombrissement relatif au fond local : 0 = comme le papier, 1 = noir
-      const d = Math.max(1 - r / br, 1 - g / bgg, 1 - b / bb);
+      const d = Math.max(1 - r / bg[0], 1 - g / bg[1], 1 - b / bg[2]);
       const a = smooth(d, 0.12, 0.38);
       if (a <= 0) continue;
       const o = (y * width + x) * 4;
-      out[o] = byte((r - br * (1 - a)) / a);
-      out[o + 1] = byte((g - bgg * (1 - a)) / a);
-      out[o + 2] = byte((b - bb * (1 - a)) / a);
+      out[o] = byte((r - bg[0] * (1 - a)) / a);
+      out[o + 1] = byte((g - bg[1] * (1 - a)) / a);
+      out[o + 2] = byte((b - bg[2] * (1 - a)) / a);
       out[o + 3] = byte(a * 255);
       if (a > 0.5) { colCount[x]++; rowCount[y]++; solid++; }
     }
@@ -146,17 +311,27 @@ async function frameImage(buffer) {
   const right = Math.min(width - 1, last(colCount) + pad);
   const top = Math.max(0, first(rowCount) - pad);
   const bottom = Math.min(height - 1, last(rowCount) + pad);
+  const cw = right - left + 1;
+  const chh = bottom - top + 1;
 
-  const cropped = await sharp(out, { raw: { width, height, channels: 4 } })
-    .extract({ left, top, width: right - left + 1, height: bottom - top + 1 })
-    .png()
-    .toBuffer();
+  let cropped = new Uint8Array(cw * chh * 4);
+  for (let y = 0; y < chh; y++) {
+    const from = ((top + y) * width + left) * 4;
+    cropped.set(out.subarray(from, from + cw * 4), y * cw * 4);
+  }
 
   // 5. Ajustement dans un cadre maximal (ratio conservé, jamais agrandie)
-  return sharp(cropped)
-    .resize({ width: 700, height: 350, fit: 'inside', withoutEnlargement: true })
-    .png()
-    .toBuffer();
+  const fit = Math.min(1, 700 / cw, 350 / chh);
+  let fw = cw, fh = chh;
+  if (fit < 1) {
+    fw = Math.max(1, Math.round(cw * fit));
+    fh = Math.max(1, Math.round(chh * fit));
+    cropped = boxResizeRgba(cropped, cw, chh, fw, fh);
+  }
+
+  const png = new PNG({ width: fw, height: fh });
+  png.data = Buffer.from(cropped.buffer, cropped.byteOffset, cropped.length);
+  return PNG.sync.write(png);
 }
 
 // ============================================================
@@ -451,8 +626,8 @@ async function issuePendingCertificatesForClient(clientUid, clientEmail) {
 // ============================================================
 router.get('/admin/health', verifyToken, isAdmin, (req, res) => {
   try {
-    const sharp = getSharp();
-    res.json({ imageProcessing: true, node: process.version, sharp: sharp.versions && sharp.versions.sharp });
+    getImageLibs();
+    res.json({ imageProcessing: true, node: process.version });
   } catch (error) {
     res.json({ imageProcessing: false, node: process.version, reason: error.message });
   }
