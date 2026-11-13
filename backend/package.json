@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "postinstall": "npm install--os=linux --cpu=x64 sharp"
   },
   "engines": {
     "node": "18.x"
