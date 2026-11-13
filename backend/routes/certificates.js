@@ -40,15 +40,25 @@ function handleImageUpload(req, res, next) {
 // ============================================================
 // CADRAGE AUTOMATIQUE D'UNE SIGNATURE / D'UN CACHET PHOTOGRAPHIÉ
 // ============================================================
-// ✅ "sharp" est chargé à la demande : s'il manque sur le serveur, seules les
-// routes qui traitent des images échouent (avec un message clair), pas tout le site.
+// ✅ "sharp" est chargé à la demande : s'il manque ou ne se charge pas sur le serveur, seules
+// les routes qui traitent des images échouent (avec la VRAIE cause), pas tout le site.
+function describeSharpFailure(e) {
+  const raw = String((e && e.message) || e || '');
+  const firstLine = raw.split('\n').find(l => l.trim()) || raw;
+  const absent = e && e.code === 'MODULE_NOT_FOUND' && /Cannot find module 'sharp'/.test(raw);
+  return absent
+    ? 'Le module "sharp" est absent du serveur : il n\'a pas été installé au déploiement. Vérifiez que backend/package.json et backend/package-lock.json (contenant sharp) ont bien été envoyés sur GitHub, puis relancez un déploiement.'
+    : `Le module "sharp" est présent mais ne peut pas se charger sur ce serveur (${firstLine.slice(0, 200)}). Sur Render : Manual Deploy → « Clear build cache & deploy ».`;
+}
+
 let sharpLib = null;
 function getSharp() {
   if (!sharpLib) {
     try {
       sharpLib = require('sharp');
     } catch (e) {
-      throw new Error('Le module "sharp" n\'est pas installé sur le serveur (npm install sharp dans le dossier backend)');
+      console.error(`❌ Chargement de sharp impossible (Node ${process.version}) : code=${e && e.code} | ${String(e && e.message).split('\n').slice(0, 3).join(' / ')}`);
+      throw new Error(describeSharpFailure(e));
     }
   }
   return sharpLib;
@@ -435,6 +445,18 @@ async function issuePendingCertificatesForClient(clientUid, clientEmail) {
   }
   return issued;
 }
+
+// ============================================================
+// 0. DIAGNOSTIC DU TRAITEMENT D'IMAGE (admin) - affiché sur la page des certificats
+// ============================================================
+router.get('/admin/health', verifyToken, isAdmin, (req, res) => {
+  try {
+    const sharp = getSharp();
+    res.json({ imageProcessing: true, node: process.version, sharp: sharp.versions && sharp.versions.sharp });
+  } catch (error) {
+    res.json({ imageProcessing: false, node: process.version, reason: error.message });
+  }
+});
 
 // ============================================================
 // 1. SIGNATAIRE PAR DÉFAUT - lecture (admin)
